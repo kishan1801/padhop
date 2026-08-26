@@ -15,35 +15,27 @@ export class BookingsService {
     private redis: RedisService,
   ) { }
 
-  async holdSlot(slotId: string) {
-    // Atomic conditional update: only succeeds if status is currently 'available'.
-    // If two requests race for the same slot, only one of these updates
-    // will actually match a row - Postgres guarantees that.
+  async holdSlot(slotId: string, userId: string) {
     const result = await this.prisma.$executeRaw`
-  UPDATE availability_slots
-  SET status = 'held'
-  WHERE id = ${slotId} AND status = 'available'
-`;
+    UPDATE availability_slots
+    SET status = 'held'
+    WHERE id = ${slotId} AND status = 'available'
+  `;
 
     if (result === 0) {
-      // Either the slot doesn't exist, or someone else already holds it
-      const slot = await this.prisma.availabilitySlot.findUnique({
-        where: { id: slotId },
-      });
+      const slot = await this.prisma.availabilitySlot.findUnique({ where: { id: slotId } });
       if (!slot) {
         throw new NotFoundException('Slot not found');
       }
       throw new ConflictException('Slot is no longer available');
     }
 
-    // Set a Redis key with a TTL - this is our "5 minutes to confirm" timer.
-    // If it expires without confirmation, a cleanup job releases the hold.
-    await this.redis.set(`hold:${slotId}`, '1', 'EX', HOLD_TTL_SECONDS);
+    await this.redis.set(`hold:${slotId}`, userId, 'EX', HOLD_TTL_SECONDS);
 
-    return { slotId, status: 'held', expiresInSeconds: HOLD_TTL_SECONDS };
+    return { slotId, status: 'held', expiresInSeconds: HOLD_TTL_SECONDS, heldBy: userId };
   }
 
-  async confirmSlot(slotId: string) {
+  async confirmSlot(slotId: string, userId: string) {
     const result = await this.prisma.$executeRaw`
     UPDATE availability_slots
     SET status = 'confirmed'
@@ -54,10 +46,9 @@ export class BookingsService {
       throw new ConflictException('Slot is not currently held - cannot confirm');
     }
 
-    // Hold fulfilled - remove the expiry timer, it's no longer needed
     await this.redis.del(`hold:${slotId}`);
 
-    return { slotId, status: 'confirmed' };
+    return { slotId, status: 'confirmed', confirmedBy: userId };
   }
 
   // ...inside the BookingsService class, alongside holdSlot/confirmSlot:

@@ -1,5 +1,6 @@
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import * as bcrypt from "bcrypt";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -48,12 +49,13 @@ async function main() {
   }
 
   const operatorUser = await prisma.user.upsert({
-    where: { email: 'operator@padhop.test' },
+    where: { email: "operator@padhop.test" },
     update: {},
     create: {
-      name: 'Test Charter Co',
-      email: 'operator@padhop.test',
-      role: 'operator',
+      name: "Test Charter Co",
+      email: "operator@padhop.test",
+      passwordHash: await bcrypt.hash("testpassword123", 10),
+      role: "operator",
     },
   });
 
