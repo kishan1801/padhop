@@ -1,0 +1,145 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+  moduleFormat    = "cjs"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+
+
+enum UserRole {
+  passenger
+  operator
+  admin
+}
+
+enum SlotStatus {
+  available
+  held
+  confirmed
+  in_flight
+  completed
+  cancelled
+  expired
+}
+
+enum BookingType {
+  now
+  reserve
+}
+
+enum BookingStatus {
+  held
+  confirmed
+  cancelled
+  completed
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  role      UserRole @default(passenger)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  operator Operator?
+  bookings Booking[]
+
+  @@map("users")
+}
+
+model Operator {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  companyName String   @map("company_name")
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user     User       @relation(fields: [userId], references: [id])
+  aircraft Aircraft[]
+
+  @@map("operators")
+}
+
+model Aircraft {
+  id           String   @id @default(uuid())
+  operatorId   String   @map("operator_id")
+  model        String
+  capacity     Int
+  registration String   @unique
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  operator Operator            @relation(fields: [operatorId], references: [id])
+  slots    AvailabilitySlot[]
+
+  @@map("aircraft")
+}
+
+model Helipad {
+  id       String @id @default(uuid())
+  name     String @unique
+  city     String
+  latitude Float
+  longitude Float
+
+  // PostGIS geography column - Prisma can't model this natively,
+  // we write/query it via raw SQL in the matching engine.
+  location Unsupported("geography(Point, 4326)")?
+
+  slotsOrigin       AvailabilitySlot[] @relation("originHelipad")
+  bookingsDestination Booking[]        @relation("destinationHelipad")
+
+  @@map("helipads")
+}
+
+model AvailabilitySlot {
+  id         String     @id @default(uuid())
+  aircraftId String     @map("aircraft_id")
+  helipadId  String     @map("helipad_id")
+  startTime  DateTime   @map("start_time")
+  endTime    DateTime   @map("end_time")
+  status     SlotStatus @default(available)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  aircraft Aircraft @relation(fields: [aircraftId], references: [id])
+  helipad  Helipad  @relation("originHelipad", fields: [helipadId], references: [id])
+  booking  Booking?
+
+  @@map("availability_slots")
+}
+
+model Booking {
+  id                   String        @id @default(uuid())
+  userId               String        @map("user_id")
+  slotId               String        @unique @map("slot_id")
+  destinationHelipadId String        @map("destination_helipad_id")
+  bookingType          BookingType   @map("booking_type")
+  status               BookingStatus @default(held)
+  price                Decimal       @db.Decimal(10, 2)
+  createdAt            DateTime      @default(now()) @map("created_at")
+
+  user               User             @relation(fields: [userId], references: [id])
+  slot               AvailabilitySlot @relation(fields: [slotId], references: [id])
+  destinationHelipad Helipad          @relation("destinationHelipad", fields: [destinationHelipadId], references: [id])
+  payment            Payment?
+
+  @@map("bookings")
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  bookingId String   @unique @map("booking_id")
+  amount    Decimal  @db.Decimal(10, 2)
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@map("payments")
+}

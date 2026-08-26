@@ -36,3 +36,11 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# AI tool skill files (auto-created by prisma init)
+.claude/
+.cursor/
+.windsurf/
+.agents/
+.devin/
+skills-lock.json

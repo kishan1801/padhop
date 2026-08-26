@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: padhop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: padhop
+      POSTGRES_PASSWORD: padhop_dev_password
+      POSTGRES_DB: padhop
+    ports:
+      - "5433:5432"
+    volumes:
+      - padhop_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: padhop-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - padhop_redis_data:/data
+
+volumes:
+  padhop_postgres_data:
+  padhop_redis_data:
