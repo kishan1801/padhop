@@ -1,159 +1,70 @@
-# Turborepo starter
+# PadHop
 
-This Turborepo starter is maintained by the Turborepo core team.
+**AI-powered helicopter charter & helipad booking platform for India** — an Uber/Ola-style on-demand and advance-reservation system, built around a real-time nearest-helipad matching engine.
 
-## Using this example
+## The idea
 
-Run the following command:
+Helicopter charter demand exists in India today — weddings, pilgrimage routes (Char Dham, Kedarnath), corporate travel — but the booking experience is still phone calls and spreadsheets. PadHop applies the on-demand matching model (think Uber's "Now" and "Reserve" modes) to real, fixed helipads: search nearby availability, book instantly or in advance, track the flight live once airborne.
 
-```sh
-npx create-turbo@latest
+This is a personal portfolio project, built to a real production standard — proper architecture, testing, CI/CD, and documentation — not a tutorial clone.
+
+## Status
+
+🚧 **Phase 1: Matching Engine Core** — in progress
+
+- [x] Monorepo scaffold (Turborepo)
+- [x] Local infrastructure (Docker Compose: PostgreSQL + PostGIS, Redis)
+- [x] Data model (Prisma schema, 7 core tables)
+- [x] Nearest-helipad geospatial search API (`GET /helipads/nearest`)
+- [ ] Availability state machine + Redis hold/lock mechanism
+- [ ] Auth, booking flow, web/mobile frontends, AI pricing, payments — see [roadmap](./docs/roadmap.md)
+
+## Tech stack
+
+| Layer           | Choice                               |
+| --------------- | ------------------------------------ |
+| Web             | React + TypeScript, Next.js          |
+| Mobile          | React Native (Expo) — planned        |
+| API             | NestJS (TypeScript)                  |
+| Database        | PostgreSQL + PostGIS, via Prisma ORM |
+| Cache / locking | Redis                                |
+| AI service      | Python FastAPI — planned             |
+| Infra (local)   | Docker Compose                       |
+
+## Architecture
+
+Three-tier: client apps → backend platform (NestJS API + AI service) → data layer (Postgres+PostGIS, Redis). Full system diagram and ERD in [`docs/architecture/`](./docs/architecture).
+
+The core technical piece is the **nearest-helipad matching engine** — PostGIS geospatial queries (`ST_DWithin`, `ST_Distance`) power both "Now" (instant) and "Reserve" (scheduled) booking modes against a shared `AvailabilitySlot` state machine.
+
+## Running locally
+
+**Prerequisites:** Node.js 22+, Docker Desktop, npm
+
+```bash
+# 1. Clone and install
+git clone https://github.com/kishan1801/padhop.git
+cd padhop
+npm install
+
+# 2. Start local infrastructure (Postgres + PostGIS, Redis)
+docker compose up -d
+
+# 3. Set up the API
+cd apps/api
+cp .env.example .env   # then fill in DATABASE_URL — see below
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+
+# 4. Run the API
+npm run start:dev
 ```
 
-## What's inside?
+API runs at `http://localhost:3000`. Try the matching engine:
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```bash
+curl "http://localhost:3000/helipads/nearest?lat=12.9716&lng=77.5946&radiusKm=50"
 ```
 
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo build
-npm exec turbo build
-npm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+## Project structure
