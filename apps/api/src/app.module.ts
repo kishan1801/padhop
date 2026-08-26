@@ -6,6 +6,7 @@ import { RedisModule } from './redis/redis.module';
 import { HelipadsModule } from './helipads/helipads.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { AuthModule } from './auth/auth.module';
+import { AircraftModule } from './aircraft/aircraft.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -15,6 +16,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     HelipadsModule,
     BookingsModule,
     AuthModule,
+    AircraftModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
