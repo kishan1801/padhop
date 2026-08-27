@@ -10,6 +10,9 @@ export class AircraftService {
     if (!operator) {
       throw new ForbiddenException('Only registered operators can add aircraft');
     }
+    if (!operator.verified) {
+      throw new ForbiddenException('Your operator account is pending verification');
+    }
 
     const existing = await this.prisma.aircraft.findUnique({ where: { registration } });
     if (existing) {
@@ -36,6 +39,9 @@ export class AircraftService {
     const operator = await this.prisma.operator.findUnique({ where: { userId } });
     if (!operator) {
       throw new ForbiddenException('Only registered operators can manage slots');
+    }
+    if (!operator.verified) {
+      throw new ForbiddenException('Your operator account is pending verification');
     }
 
     const aircraft = await this.prisma.aircraft.findUnique({ where: { id: aircraftId } });
