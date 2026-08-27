@@ -25,4 +25,36 @@ export class AircraftService {
       },
     });
   }
+
+  async createSlot(
+    userId: string,
+    aircraftId: string,
+    helipadId: string,
+    startTime: Date,
+    endTime: Date,
+  ) {
+    const operator = await this.prisma.operator.findUnique({ where: { userId } });
+    if (!operator) {
+      throw new ForbiddenException('Only registered operators can manage slots');
+    }
+
+    const aircraft = await this.prisma.aircraft.findUnique({ where: { id: aircraftId } });
+    if (!aircraft || aircraft.operatorId !== operator.id) {
+      throw new ForbiddenException('This aircraft does not belong to you');
+    }
+
+    if (endTime <= startTime) {
+      throw new ConflictException('End time must be after start time');
+    }
+
+    return this.prisma.availabilitySlot.create({
+      data: {
+        aircraftId,
+        helipadId,
+        startTime,
+        endTime,
+        status: 'available',
+      },
+    });
+  }
 }
