@@ -1,6 +1,6 @@
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import * as bcrypt from "bcrypt";
+import * as bcrypt from 'bcrypt';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -49,13 +49,13 @@ async function main() {
   }
 
   const operatorUser = await prisma.user.upsert({
-    where: { email: "operator@padhop.test" },
+    where: { email: 'operator@padhop.test' },
     update: {},
     create: {
-      name: "Test Charter Co",
-      email: "operator@padhop.test",
-      passwordHash: await bcrypt.hash("testpassword123", 10),
-      role: "operator",
+      name: 'Test Charter Co',
+      email: 'operator@padhop.test',
+      passwordHash: await bcrypt.hash('testpassword123', 10),
+      role: 'operator',
     },
   });
 
@@ -80,10 +80,34 @@ async function main() {
     },
   });
 
+  const now = new Date();
+  for (const [index, helipad] of helipads.entries()) {
+    const startTime = new Date(now.getTime() + (index + 1) * 60 * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + 45 * 60 * 1000);
+    const existingSlot = await prisma.availabilitySlot.findFirst({
+      where: {
+        aircraftId: aircraft.id,
+        helipadId: helipad.id,
+        endTime: { gt: now },
+      },
+    });
+    if (!existingSlot) {
+      await prisma.availabilitySlot.create({
+        data: {
+          aircraftId: aircraft.id,
+          helipadId: helipad.id,
+          startTime,
+          endTime,
+        },
+      });
+    }
+  }
+
   console.log('Seeded:', {
     helipads: helipads.length,
     operator: operator.companyName,
     aircraft: aircraft.registration,
+    slots: helipads.length,
   });
 }
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { HelipadsService } from './helipads.service';
 
 @Controller('helipads')
@@ -16,5 +16,10 @@ export class HelipadsController {
       parseFloat(lng),
       radiusKm ? parseFloat(radiusKm) : undefined,
     );
+  }
+
+  @Get(':id/slots')
+  async availableSlots(@Param('id') id: string) {
+    return this.helipadsService.findAvailableSlots(id);
   }
 }

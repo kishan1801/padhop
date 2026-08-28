@@ -1,102 +1,358 @@
-import Image, { type ImageProps } from "next/image";
-import { Button } from "@repo/ui/button";
-import styles from "./page.module.css";
+"use client";
 
-type Props = Omit<ImageProps, "src"> & {
-  srcLight: string;
-  srcDark: string;
+import { FormEvent, useState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+type Helipad = {
+  id: string;
+  name: string;
+  city: string;
+  distance_km: number;
+  available_slots: number;
 };
+type Slot = {
+  id: string;
+  startTime: string;
+  aircraft: { model: string; capacity: number };
+};
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
-const ThemeImage = (props: Props) => {
-  const { srcLight, srcDark, ...rest } = props;
-
-  return (
-    <>
-      <Image {...rest} src={srcLight} className="imgLight" />
-      <Image {...rest} src={srcDark} className="imgDark" />
-    </>
+export default function SearchPage() {
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">(
+    "idle",
   );
-};
+  const [message, setMessage] = useState("");
+  const [results, setResults] = useState<Helipad[]>([]);
+  const [radiusKm, setRadiusKm] = useState(50);
+  const [selectedHelipad, setSelectedHelipad] = useState<string | null>(null);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
+  const [heldSlot, setHeldSlot] = useState<Slot | null>(null);
+  const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
+  const [authLoading, setAuthLoading] = useState(false);
 
-export default function Home() {
+  async function json(response: Response) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok)
+      throw new Error(
+        Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message || "Request failed",
+      );
+    return data;
+  }
+
+  async function runSearch(lat: number, lng: number) {
+    setStatus("loading");
+    setMessage("");
+    setSelectedHelipad(null);
+    try {
+      setResults(
+        await json(
+          await fetch(
+            `${API_URL}/helipads/nearest?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
+          ),
+        ),
+      );
+      setStatus("done");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Search failed");
+      setStatus("error");
+    }
+  }
+
+  function nearMe() {
+    if (!navigator.geolocation) {
+      setMessage("Location services are not supported in this browser.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        runSearch(position.coords.latitude, position.coords.longitude),
+      () => {
+        setMessage(
+          "We couldn't access your location. Try the Bengaluru demo instead.",
+        );
+        setStatus("error");
+      },
+    );
+  }
+
+  async function showSlots(id: string) {
+    setSelectedHelipad(id);
+    setLoadingSlots(true);
+    setMessage("");
+    try {
+      setSlots(await json(await fetch(`${API_URL}/helipads/${id}/slots`)));
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not load aircraft.",
+      );
+    } finally {
+      setLoadingSlots(false);
+    }
+  }
+
+  async function hold(slot: Slot, accessToken = token) {
+    if (!accessToken) {
+      setPendingSlot(slot);
+      return;
+    }
+    try {
+      await json(
+        await fetch(`${API_URL}/bookings/hold/${slot.id}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        }),
+      );
+      setHeldSlot(slot);
+      setPendingSlot(null);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not hold this charter.",
+      );
+    }
+  }
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setAuthLoading(true);
+    setMessage("");
+    try {
+      const body =
+        authMode === "signup"
+          ? {
+              name: String(form.get("name")),
+              email: String(form.get("email")),
+              password: String(form.get("password")),
+            }
+          : {
+              email: String(form.get("email")),
+              password: String(form.get("password")),
+            };
+      const data = await json(
+        await fetch(`${API_URL}/auth/${authMode}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+      setToken(data.accessToken);
+      if (pendingSlot) await hold(pendingSlot, data.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not sign in.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function confirm() {
+    if (!token || !heldSlot) return;
+    try {
+      await json(
+        await fetch(`${API_URL}/bookings/confirm/${heldSlot.id}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+      setHeldSlot(null);
+      setMessage(
+        "Your charter is confirmed. We'll share flight details shortly.",
+      );
+      if (selectedHelipad) await showSlots(selectedHelipad);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not confirm this charter.",
+      );
+    }
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <ThemeImage
-          className={styles.logo}
-          srcLight="turborepo-dark.svg"
-          srcDark="turborepo-light.svg"
-          alt="Turborepo logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>apps/web/app/page.tsx</code>
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new/clone?demo-description=Learn+to+implement+a+monorepo+with+a+two+Next.js+sites+that+has+installed+three+local+packages.&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4K8ZISWAzJ8X1504ca0zmC%2F0b21a1c6246add355e55816278ef54bc%2FBasic.png&demo-title=Monorepo+with+Turborepo&demo-url=https%3A%2F%2Fexamples-basic-web.vercel.sh%2F&from=templates&project-name=Monorepo+with+Turborepo&repository-name=monorepo-turborepo&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fturborepo%2Ftree%2Fmain%2Fexamples%2Fbasic&root-directory=apps%2Fdocs&skippable-integrations=1&teamSlug=vercel&utm_source=create-turbo"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="page">
+      <ThemeToggle />
+      <section className="hero">
+        <p className="eyebrow">PadHop</p>
+        <h1>Find a charter, right where you are.</h1>
+        <p className="subhead">
+          Search nearby helipads, choose an available aircraft, and reserve it
+          in minutes.
+        </p>
+        <div className="searchPanel">
+          <div className="field">
+            <label htmlFor="radius">Search radius</label>
+            <select
+              id="radius"
+              value={radiusKm}
+              onChange={(e) => setRadiusKm(Number(e.target.value))}
+            >
+              <option value={10}>10 km</option>
+              <option value={25}>25 km</option>
+              <option value={50}>50 km</option>
+              <option value={100}>100 km</option>
+            </select>
+          </div>
+          <button
+            className="searchButton"
+            onClick={nearMe}
+            disabled={status === "loading"}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://turborepo.dev/docs?utm_source"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
+            {status === "loading" ? "Searching…" : "Search near me"}
+          </button>
+          <button
+            className="searchButtonSecondary"
+            onClick={() => runSearch(12.9716, 77.5946)}
+            disabled={status === "loading"}
           >
-            Read our docs
-          </a>
+            Try Bengaluru
+          </button>
         </div>
-        <Button appName="web" className={styles.secondary}>
-          Open alert
-        </Button>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com/templates?search=turborepo&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://turborepo.dev?utm_source=create-turbo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to turborepo.dev →
-        </a>
-      </footer>
-    </div>
+      </section>
+      {pendingSlot && !token && (
+        <section className="authPanel">
+          <p className="eyebrow">One last step</p>
+          <h2>
+            {authMode === "signup"
+              ? "Create your passenger account"
+              : "Welcome back"}
+          </h2>
+          <p>Sign in to hold this aircraft for five minutes.</p>
+          <form onSubmit={submitAuth}>
+            {authMode === "signup" && (
+              <input name="name" required placeholder="Your name" />
+            )}
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="Email address"
+            />
+            <input
+              name="password"
+              type="password"
+              minLength={8}
+              required
+              placeholder="Password"
+            />
+            <button className="searchButton" disabled={authLoading}>
+              {authLoading
+                ? "Please wait…"
+                : authMode === "signup"
+                  ? "Create account & hold"
+                  : "Sign in & hold"}
+            </button>
+            <button
+              type="button"
+              className="textButton"
+              onClick={() =>
+                setAuthMode(authMode === "signup" ? "login" : "signup")
+              }
+            >
+              {authMode === "signup"
+                ? "Already have an account? Sign in"
+                : "New to PadHop? Create an account"}
+            </button>
+          </form>
+        </section>
+      )}
+      {heldSlot && (
+        <section className="holdPanel">
+          <div>
+            <p className="eyebrow">Aircraft held</p>
+            <h2>{heldSlot.aircraft.model}</h2>
+            <p>
+              Your slot is reserved for five minutes. Confirm to complete this
+              demo booking.
+            </p>
+          </div>
+          <button className="searchButton" onClick={confirm}>
+            Confirm charter
+          </button>
+        </section>
+      )}
+      {message && (
+        <p className={`notice ${status === "error" ? "error" : ""}`}>
+          {message}
+        </p>
+      )}
+      <section className="results" aria-live="polite">
+        {status === "idle" && (
+          <p className="hint">
+            Search near you, or try Bengaluru to see live demo availability.
+          </p>
+        )}
+        {status === "done" && results.length === 0 && (
+          <p className="hint">
+            No charters are available nearby right now. Try a wider search
+            radius.
+          </p>
+        )}
+        {results.map((helipad) => (
+          <article key={helipad.id} className="card">
+            <div className="cardMain">
+              <h2>{helipad.name}</h2>
+              <p className="cardCity">
+                {helipad.city} · {helipad.distance_km.toFixed(1)} km away
+              </p>
+            </div>
+            <div className="cardMeta">
+              <span className="availability">
+                {helipad.available_slots}{" "}
+                {helipad.available_slots === 1 ? "charter" : "charters"}{" "}
+                available
+              </span>
+              <button
+                className="searchButtonSecondary"
+                onClick={() => showSlots(helipad.id)}
+              >
+                {selectedHelipad === helipad.id
+                  ? "Refresh flights"
+                  : "View flights"}
+              </button>
+            </div>
+            {selectedHelipad === helipad.id && (
+              <div className="slotList">
+                {loadingSlots ? (
+                  <p>Loading available aircraft…</p>
+                ) : slots.length === 0 ? (
+                  <p>No aircraft are available at this helipad now.</p>
+                ) : (
+                  slots.map((slot) => (
+                    <div className="slot" key={slot.id}>
+                      <div>
+                        <strong>{slot.aircraft.model}</strong>
+                        <span>
+                          {new Date(slot.startTime).toLocaleString([], {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}{" "}
+                          · {slot.aircraft.capacity} seats
+                        </span>
+                      </div>
+                      <button
+                        className="searchButton"
+                        onClick={() => hold(slot)}
+                      >
+                        Hold charter
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </article>
+        ))}
+      </section>
+    </main>
   );
 }

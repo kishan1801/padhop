@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class HelipadsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async findNearest(latitude: number, longitude: number, radiusKm = 50) {
     const radiusMeters = radiusKm * 1000;
@@ -33,5 +33,24 @@ export class HelipadsService {
     GROUP BY h.id, h.name, h.city, h.latitude, h.longitude, h.location
     ORDER BY distance_km ASC;
   `;
+  }
+
+  async findAvailableSlots(helipadId: string) {
+    return this.prisma.availabilitySlot.findMany({
+      where: {
+        helipadId,
+        status: 'available',
+        endTime: { gt: new Date() },
+      },
+      orderBy: { startTime: 'asc' },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        aircraft: {
+          select: { model: true, capacity: true, registration: true },
+        },
+      },
+    });
   }
 }
