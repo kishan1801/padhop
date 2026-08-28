@@ -70,45 +70,42 @@ body {
 .page {
   position: relative;
   min-height: 100vh;
-  padding: 4rem 1.5rem 6rem;
-  overflow: hidden;
-}
-
-.horizon {
-  position: absolute;
-  top: 18%;
-  left: -10%;
-  width: 120%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--brass-dim) 20%,
-    var(--brass) 50%,
-    var(--brass-dim) 80%,
-    transparent 100%
-  );
-  opacity: 0.5;
-  animation: drift 18s ease-in-out infinite;
-}
-
-@keyframes drift {
-  0%,
-  100% {
-    transform: translateY(0) scaleX(1);
-    opacity: 0.35;
-  }
-
-  50% {
-    transform: translateY(6px) scaleX(1.02);
-    opacity: 0.55;
-  }
+  padding: 0 0 6rem;
 }
 
 .hero {
   position: relative;
+  height: 640px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  overflow: hidden;
+}
+
+.heroImage {
+  object-fit: cover;
+  object-position: center 58%;
+  z-index: 0;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 10, 20, 0.75) 0%,
+    rgba(6, 10, 20, 0.55) 40%,
+    rgba(6, 10, 20, 0.92) 100%
+  );
+  z-index: 0;
+}
+
+.heroContent {
+  position: relative;
+  z-index: 1;
   max-width: 640px;
-  margin: 0 auto 4rem;
   text-align: center;
 }
 
@@ -125,15 +122,16 @@ body {
 .hero h1 {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(2rem, 5vw, 3rem);
+  font-size: clamp(2.2rem, 5.5vw, 3.4rem);
   line-height: 1.1;
   margin: 0 0 1rem;
-  color: var(--text-primary);
+  color: #f5f6f8;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
 }
 
 .subhead {
-  color: var(--text-secondary);
-  font-size: 1.05rem;
+  color: #d7dae2;
+  font-size: 1.1rem;
   line-height: 1.5;
   margin: 0 0 2.5rem;
 }
@@ -143,9 +141,10 @@ body {
   gap: 0.75rem;
   align-items: flex-end;
   justify-content: center;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: rgba(18, 27, 46, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
   padding: 1.25rem;
   flex-wrap: wrap;
 }
@@ -159,14 +158,13 @@ body {
 
 .field label {
   font-size: 0.75rem;
-  color: var(--text-secondary);
-  letter-spacing: 0.03em;
+  color: #c3c8d4;
 }
 
 .field select {
-  background: var(--bg);
-  color: var(--text-primary);
-  border: 1px solid var(--panel-border);
+  background: rgba(11, 18, 32, 0.6);
+  color: #f5f6f8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
   font-family: var(--font-body);
@@ -190,6 +188,9 @@ body {
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   transition: opacity 0.15s ease;
 }
 
@@ -202,104 +203,90 @@ body {
   cursor: not-allowed;
 }
 
-.results {
-  max-width: 640px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
 .authPanel,
 .holdPanel {
-  max-width: 640px;
-  margin: 0 auto 1.5rem;
+  max-width: 480px;
+  margin: 2rem auto 0;
+  padding: 1.5rem;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: 14px;
 }
 
-.authPanel h2,
 .holdPanel h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: var(--font-display);
-  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  margin: 0.3rem 0;
 }
 
-.authPanel p,
-.holdPanel p,
-.slot span {
-  color: var(--text-secondary);
+.holdPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 640px;
 }
 
 .authPanel form {
-  display: grid;
-  gap: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-top: 1rem;
 }
 
 .authPanel input {
-  width: 100%;
+  background: var(--bg);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: var(--bg);
   color: var(--text-primary);
-  padding: 0.7rem 0.75rem;
-  font: inherit;
+  padding: 0.65rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
 }
 
 .textButton {
-  justify-self: start;
-  border: 0;
-  background: transparent;
-  color: var(--brass);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-decoration: underline;
   cursor: pointer;
-  padding: 0;
-  font: inherit;
+  padding: 0.5rem 0;
 }
 
-.holdPanel,
-.slot {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
+.fullWidth {
+  width: 100%;
+  margin-top: 0.75rem;
 }
 
 .notice {
   max-width: 640px;
-  margin: 0 auto 1rem;
+  margin: 1.5rem auto 0;
+  padding: 0.85rem 1.2rem;
   text-align: center;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--available);
   color: var(--available);
+  font-size: 0.9rem;
 }
 
 .notice.error {
+  border-color: #d97757;
   color: #d97757;
 }
 
-.slotList {
-  width: 100%;
-  border-top: 1px solid var(--panel-border);
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.slot {
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 0.75rem;
-}
-
-.slot strong,
-.slot span {
-  display: block;
-}
-
-.slot span {
-  font-size: 0.85rem;
-  margin-top: 0.2rem;
+.results {
+  max-width: 680px;
+  margin: 3rem auto 0;
+  padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 .hint {
@@ -309,69 +296,118 @@ body {
   padding: 2rem 1rem;
 }
 
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 1.1rem 1.4rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  animation: fadeUp 0.35s ease backwards;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--brass);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .hint.error {
   color: #d97757;
 }
 
-.card {
+.cardTop {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  padding: 1.1rem 1.4rem;
   flex-wrap: wrap;
+}
+
+.cardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--brass);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardMain {
+  flex: 1;
+  min-width: 160px;
 }
 
 .cardMain h2 {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 1.1rem;
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.25rem;
   color: var(--text-primary);
 }
 
 .cardCity {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   color: var(--text-secondary);
   font-size: 0.85rem;
   margin: 0;
 }
 
-.cardMeta {
+.slotList {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.slotInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.slotInfo span {
+  display: flex;
+  align-items: center;
   gap: 0.3rem;
-}
-
-.distance {
-  font-family: var(--font-display);
   color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 
-.availability {
-  color: var(--available);
-  font-size: 0.85rem;
-  font-weight: 500;
+.spin {
+  animation: spin 0.8s linear infinite;
 }
 
-@media (max-width: 480px) {
-  .card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .cardMeta {
-    align-items: flex-start;
-  }
-
-  .holdPanel,
-  .slot {
-    flex-direction: column;
-    align-items: flex-start;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { MapPin, Plane, Clock, Users, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Badge } from "@/components/ui/badge";
 
 type Helipad = {
   id: string;
@@ -18,9 +21,7 @@ type Slot = {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export default function SearchPage() {
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [results, setResults] = useState<Helipad[]>([]);
   const [radiusKm, setRadiusKm] = useState(50);
@@ -37,9 +38,7 @@ export default function SearchPage() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok)
       throw new Error(
-        Array.isArray(data.message)
-          ? data.message.join(", ")
-          : data.message || "Request failed",
+        Array.isArray(data.message) ? data.message.join(", ") : data.message || "Request failed",
       );
     return data;
   }
@@ -51,9 +50,7 @@ export default function SearchPage() {
     try {
       setResults(
         await json(
-          await fetch(
-            `${API_URL}/helipads/nearest?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
-          ),
+          await fetch(`${API_URL}/helipads/nearest?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`),
         ),
       );
       setStatus("done");
@@ -71,12 +68,9 @@ export default function SearchPage() {
     }
     setStatus("loading");
     navigator.geolocation.getCurrentPosition(
-      (position) =>
-        runSearch(position.coords.latitude, position.coords.longitude),
+      (position) => runSearch(position.coords.latitude, position.coords.longitude),
       () => {
-        setMessage(
-          "We couldn't access your location. Try the Bengaluru demo instead.",
-        );
+        setMessage("We couldn't access your location. Try the Bengaluru demo instead.");
         setStatus("error");
       },
     );
@@ -89,9 +83,7 @@ export default function SearchPage() {
     try {
       setSlots(await json(await fetch(`${API_URL}/helipads/${id}/slots`)));
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not load aircraft.",
-      );
+      setMessage(error instanceof Error ? error.message : "Could not load aircraft.");
     } finally {
       setLoadingSlots(false);
     }
@@ -106,19 +98,14 @@ export default function SearchPage() {
       await json(
         await fetch(`${API_URL}/bookings/hold/${slot.id}`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
           body: "{}",
         }),
       );
       setHeldSlot(slot);
       setPendingSlot(null);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not hold this charter.",
-      );
+      setMessage(error instanceof Error ? error.message : "Could not hold this charter.");
     }
   }
 
@@ -131,14 +118,11 @@ export default function SearchPage() {
       const body =
         authMode === "signup"
           ? {
-              name: String(form.get("name")),
-              email: String(form.get("email")),
-              password: String(form.get("password")),
-            }
-          : {
-              email: String(form.get("email")),
-              password: String(form.get("password")),
-            };
+            name: String(form.get("name")),
+            email: String(form.get("email")),
+            password: String(form.get("password")),
+          }
+          : { email: String(form.get("email")), password: String(form.get("password")) };
       const data = await json(
         await fetch(`${API_URL}/auth/${authMode}`, {
           method: "POST",
@@ -165,16 +149,10 @@ export default function SearchPage() {
         }),
       );
       setHeldSlot(null);
-      setMessage(
-        "Your charter is confirmed. We'll share flight details shortly.",
-      );
+      setMessage("Your charter is confirmed. We'll share flight details shortly.");
       if (selectedHelipad) await showSlots(selectedHelipad);
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not confirm this charter.",
-      );
+      setMessage(error instanceof Error ? error.message : "Could not confirm this charter.");
     }
   }
 
@@ -182,144 +160,107 @@ export default function SearchPage() {
     <main className="page">
       <ThemeToggle />
       <section className="hero">
-        <p className="eyebrow">PadHop</p>
-        <h1>Find a charter, right where you are.</h1>
-        <p className="subhead">
-          Search nearby helipads, choose an available aircraft, and reserve it
-          in minutes.
-        </p>
-        <div className="searchPanel">
-          <div className="field">
-            <label htmlFor="radius">Search radius</label>
-            <select
-              id="radius"
-              value={radiusKm}
-              onChange={(e) => setRadiusKm(Number(e.target.value))}
+        <Image
+          src="https://images.unsplash.com/photo-1557818673-effec50525e1?q=80&w=1600&auto=format&fit=crop"
+          alt=""
+          fill
+          priority
+          className="heroImage"
+        />
+        <div className="heroContent">
+          <p className="eyebrow">PadHop</p>
+          <h1>Find a charter, right where you are.</h1>
+          <p className="subhead">
+            Real helicopters, real-time availability. Search your nearest helipad and book in minutes.
+          </p>
+          <div className="searchPanel">
+            <div className="field">
+              <label htmlFor="radius">Search radius</label>
+              <select id="radius" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))}>
+                <option value={10}>10 km</option>
+                <option value={25}>25 km</option>
+                <option value={50}>50 km</option>
+                <option value={100}>100 km</option>
+              </select>
+            </div>
+            <button className="searchButton" onClick={nearMe} disabled={status === "loading"}>
+              {status === "loading" ? <><Loader2 size={16} className="spin" /> Searching</> : "Search near me"}
+            </button>
+            <button
+              className="searchButtonSecondary"
+              onClick={() => runSearch(12.9716, 77.5946)}
+              disabled={status === "loading"}
             >
-              <option value={10}>10 km</option>
-              <option value={25}>25 km</option>
-              <option value={50}>50 km</option>
-              <option value={100}>100 km</option>
-            </select>
+              Try Bengaluru
+            </button>
           </div>
-          <button
-            className="searchButton"
-            onClick={nearMe}
-            disabled={status === "loading"}
-          >
-            {status === "loading" ? "Searching…" : "Search near me"}
-          </button>
-          <button
-            className="searchButtonSecondary"
-            onClick={() => runSearch(12.9716, 77.5946)}
-            disabled={status === "loading"}
-          >
-            Try Bengaluru
-          </button>
         </div>
       </section>
+
       {pendingSlot && !token && (
         <section className="authPanel">
           <p className="eyebrow">One last step</p>
-          <h2>
-            {authMode === "signup"
-              ? "Create your passenger account"
-              : "Welcome back"}
-          </h2>
+          <h2>{authMode === "signup" ? "Create your passenger account" : "Welcome back"}</h2>
           <p>Sign in to hold this aircraft for five minutes.</p>
           <form onSubmit={submitAuth}>
-            {authMode === "signup" && (
-              <input name="name" required placeholder="Your name" />
-            )}
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="Email address"
-            />
-            <input
-              name="password"
-              type="password"
-              minLength={8}
-              required
-              placeholder="Password"
-            />
+            {authMode === "signup" && <input name="name" required placeholder="Your name" />}
+            <input name="email" type="email" required placeholder="Email address" />
+            <input name="password" type="password" minLength={8} required placeholder="Password" />
             <button className="searchButton" disabled={authLoading}>
-              {authLoading
-                ? "Please wait…"
-                : authMode === "signup"
-                  ? "Create account & hold"
-                  : "Sign in & hold"}
+              {authLoading ? "Please wait…" : authMode === "signup" ? "Create account & hold" : "Sign in & hold"}
             </button>
             <button
               type="button"
               className="textButton"
-              onClick={() =>
-                setAuthMode(authMode === "signup" ? "login" : "signup")
-              }
+              onClick={() => setAuthMode(authMode === "signup" ? "login" : "signup")}
             >
-              {authMode === "signup"
-                ? "Already have an account? Sign in"
-                : "New to PadHop? Create an account"}
+              {authMode === "signup" ? "Already have an account? Sign in" : "New to PadHop? Create an account"}
             </button>
           </form>
         </section>
       )}
+
       {heldSlot && (
         <section className="holdPanel">
           <div>
             <p className="eyebrow">Aircraft held</p>
-            <h2>{heldSlot.aircraft.model}</h2>
-            <p>
-              Your slot is reserved for five minutes. Confirm to complete this
-              demo booking.
-            </p>
+            <h2><Plane size={18} /> {heldSlot.aircraft.model}</h2>
+            <p>Your slot is reserved for five minutes. Confirm to complete this demo booking.</p>
           </div>
           <button className="searchButton" onClick={confirm}>
             Confirm charter
           </button>
         </section>
       )}
-      {message && (
-        <p className={`notice ${status === "error" ? "error" : ""}`}>
-          {message}
-        </p>
-      )}
+
+      {message && <p className={`notice ${status === "error" ? "error" : ""}`}>{message}</p>}
+
       <section className="results" aria-live="polite">
         {status === "idle" && (
-          <p className="hint">
-            Search near you, or try Bengaluru to see live demo availability.
-          </p>
+          <p className="hint">Search near you, or try Bengaluru to see live demo availability.</p>
         )}
         {status === "done" && results.length === 0 && (
-          <p className="hint">
-            No charters are available nearby right now. Try a wider search
-            radius.
-          </p>
+          <p className="hint">No charters are available nearby right now. Try a wider search radius.</p>
         )}
-        {results.map((helipad) => (
-          <article key={helipad.id} className="card">
-            <div className="cardMain">
-              <h2>{helipad.name}</h2>
-              <p className="cardCity">
-                {helipad.city} · {helipad.distance_km.toFixed(1)} km away
-              </p>
+        {results.map((helipad, i) => (
+          <article key={helipad.id} className="card" style={{ animationDelay: `${i * 60}ms` }}>
+            <div className="cardTop">
+              <div className="cardIcon">
+                <Plane size={20} />
+              </div>
+              <div className="cardMain">
+                <h2>{helipad.name}</h2>
+                <p className="cardCity">
+                  <MapPin size={13} /> {helipad.city} · {helipad.distance_km.toFixed(1)} km away
+                </p>
+              </div>
+              <Badge variant={helipad.available_slots > 0 ? "default" : "secondary"}>
+                {helipad.available_slots} {helipad.available_slots === 1 ? "charter" : "charters"}
+              </Badge>
             </div>
-            <div className="cardMeta">
-              <span className="availability">
-                {helipad.available_slots}{" "}
-                {helipad.available_slots === 1 ? "charter" : "charters"}{" "}
-                available
-              </span>
-              <button
-                className="searchButtonSecondary"
-                onClick={() => showSlots(helipad.id)}
-              >
-                {selectedHelipad === helipad.id
-                  ? "Refresh flights"
-                  : "View flights"}
-              </button>
-            </div>
+            <button className="searchButtonSecondary fullWidth" onClick={() => showSlots(helipad.id)}>
+              {selectedHelipad === helipad.id ? "Refresh flights" : "View flights"}
+            </button>
             {selectedHelipad === helipad.id && (
               <div className="slotList">
                 {loadingSlots ? (
@@ -329,20 +270,16 @@ export default function SearchPage() {
                 ) : (
                   slots.map((slot) => (
                     <div className="slot" key={slot.id}>
-                      <div>
+                      <div className="slotInfo">
                         <strong>{slot.aircraft.model}</strong>
                         <span>
-                          {new Date(slot.startTime).toLocaleString([], {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}{" "}
-                          · {slot.aircraft.capacity} seats
+                          <Clock size={13} />{" "}
+                          {new Date(slot.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                          {" · "}
+                          <Users size={13} /> {slot.aircraft.capacity} seats
                         </span>
                       </div>
-                      <button
-                        className="searchButton"
-                        onClick={() => hold(slot)}
-                      >
+                      <button className="searchButton" onClick={() => hold(slot)}>
                         Hold charter
                       </button>
                     </div>
