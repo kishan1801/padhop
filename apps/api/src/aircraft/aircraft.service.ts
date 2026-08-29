@@ -5,6 +5,22 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AircraftService {
   constructor(private prisma: PrismaService) { }
 
+  async listMine(userId: string) {
+    const operator = await this.prisma.operator.findUnique({ where: { userId } });
+    if (!operator) {
+      throw new ForbiddenException('Only registered operators can view their fleet');
+    }
+
+    return this.prisma.aircraft.findMany({
+      where: { operatorId: operator.id },
+      include: {
+        slots: {
+          orderBy: { startTime: 'asc' },
+        },
+      },
+    });
+  }
+
   async create(userId: string, model: string, capacity: number, registration: string) {
     const operator = await this.prisma.operator.findUnique({ where: { userId } });
     if (!operator) {

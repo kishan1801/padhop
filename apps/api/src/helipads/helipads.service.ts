@@ -5,6 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export class HelipadsService {
   constructor(private prisma: PrismaService) {}
 
+  async listAll() {
+    return this.prisma.helipad.findMany({
+      select: { id: true, name: true, city: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findNearest(latitude: number, longitude: number, radiusKm = 50) {
     const radiusMeters = radiusKm * 1000;
 

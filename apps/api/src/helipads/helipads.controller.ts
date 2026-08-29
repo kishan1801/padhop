@@ -5,6 +5,11 @@ import { HelipadsService } from './helipads.service';
 export class HelipadsController {
   constructor(private helipadsService: HelipadsService) {}
 
+  @Get()
+  async list() {
+    return this.helipadsService.listAll();
+  }
+
   @Get('nearest')
   async nearest(
     @Query('lat') lat: string,
