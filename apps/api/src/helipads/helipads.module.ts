@@ -5,5 +5,6 @@ import { HelipadsService } from './helipads.service';
 @Module({
   controllers: [HelipadsController],
   providers: [HelipadsService],
+  exports: [HelipadsService],
 })
-export class HelipadsModule {}
+export class HelipadsModule { }

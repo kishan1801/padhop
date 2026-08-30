@@ -10,6 +10,7 @@ import { AircraftModule } from './aircraft/aircraft.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { OperatorsModule } from './operators/operators.module'
 import { WeatherModule } from './weather/weather.module'
+import { ChatModule } from './chat/chat.module'
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { WeatherModule } from './weather/weather.module'
     AircraftModule,
     OperatorsModule,
     WeatherModule,
+    ChatModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
