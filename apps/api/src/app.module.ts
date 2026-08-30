@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { AircraftModule } from './aircraft/aircraft.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { OperatorsModule } from './operators/operators.module'
+import { WeatherModule } from './weather/weather.module'
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { OperatorsModule } from './operators/operators.module'
     AuthModule,
     AircraftModule,
     OperatorsModule,
+    WeatherModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
