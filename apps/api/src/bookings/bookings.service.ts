@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PricingService } from '../pricing/pricing.service';
 
 const HOLD_TTL_SECONDS = 5 * 60; // 5 minutes
 @Injectable()
@@ -13,7 +14,8 @@ export class BookingsService {
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
-  ) {}
+    private pricing: PricingService,
+  ) { }
 
   async holdSlot(
     slotId: string,
@@ -22,8 +24,11 @@ export class BookingsService {
   ) {
     const slot = await this.prisma.availabilitySlot.findUnique({
       where: { id: slotId },
+      include: { aircraft: true },
     });
     if (!slot) throw new NotFoundException('Slot not found');
+
+    const { totalPrice } = await this.pricing.calculatePrice(slot.helipadId, slot.aircraft.capacity);
 
     const booking = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.availabilitySlot.updateMany({
@@ -41,7 +46,7 @@ export class BookingsService {
           slotId,
           destinationHelipadId: destinationHelipadId ?? slot.helipadId,
           bookingType: 'now',
-          price: 0,
+          price: totalPrice,
         },
       });
     });
@@ -53,6 +58,7 @@ export class BookingsService {
       slotId,
       status: 'held',
       expiresInSeconds: HOLD_TTL_SECONDS,
+      price: totalPrice,
     };
   }
 
