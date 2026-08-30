@@ -5,14 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg: #f5f7fa;
+  --bg: #eef4fb;
   --panel: #ffffff;
-  --panel-border: #d8dfe8;
-  --brass: #b8860b;
-  --brass-dim: #8a6b08;
-  --text-primary: #1a2740;
-  --text-secondary: #5a6b85;
-  --available: #2f8b5f;
+  --panel-border: #d7e3f0;
+  --brass: #a8760f;
+  --brass-dim: #7d5a0c;
+  --text-primary: #16233a;
+  --text-secondary: #5c7290;
+  --available: #2a7a54;
 
   --font-display: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
@@ -461,14 +461,16 @@ body {
 }
 
 .dark {
-  --bg: #0b1220;
-  --panel: #121b2e;
-  --panel-border: #223049;
+  --bg: #0d1526;
+  --panel: #16223b;
+  --panel-border: #2a3a58;
   --brass: #c9a227;
   --brass-dim: #8a7020;
-  --text-primary: #edeff3;
-  --text-secondary: #8a93a6;
-  --available: #3fa671;
+  --text-primary: #eef1f6;
+  --text-secondary: #92a0ba;
+  --available: #47b57e;
+
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
