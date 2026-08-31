@@ -3,6 +3,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { PricingService } from '../pricing/pricing.service';
 
 describe('BookingsService', () => {
   let service: BookingsService;
@@ -11,6 +12,7 @@ describe('BookingsService', () => {
     $transaction: jest.Mock;
   };
   let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let pricing: { calculatePrice: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -18,12 +20,14 @@ describe('BookingsService', () => {
       $transaction: jest.fn(),
     };
     redis = { set: jest.fn(), get: jest.fn(), del: jest.fn() };
+    pricing = { calculatePrice: jest.fn().mockResolvedValue({ totalPrice: 48000 }) };
 
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
+        { provide: PricingService, useValue: pricing },
       ],
     }).compile();
 
@@ -43,6 +47,7 @@ describe('BookingsService', () => {
       prisma.availabilitySlot.findUnique.mockResolvedValue({
         id: 'slot-1',
         helipadId: 'helipad-1',
+        aircraft: { capacity: 6 },
       });
 
       // Simulate the atomic UPDATE affecting zero rows - someone else got there first
@@ -62,6 +67,7 @@ describe('BookingsService', () => {
       prisma.availabilitySlot.findUnique.mockResolvedValue({
         id: 'slot-1',
         helipadId: 'helipad-1',
+        aircraft: { capacity: 6 },
       });
 
       prisma.$transaction.mockImplementation(async (fn) => {
