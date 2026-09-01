@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useRef, useEffect } from "react";
 import { MapPin, Plane, Clock, Users, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -33,6 +33,13 @@ export default function SearchPage() {
   const [heldSlot, setHeldSlot] = useState<Slot | null>(null);
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
   const [authLoading, setAuthLoading] = useState(false);
+  const authPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pendingSlot && !token) {
+      authPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [pendingSlot, token]);
 
   async function json(response: Response) {
     const data = await response.json().catch(() => ({}));
@@ -198,7 +205,7 @@ export default function SearchPage() {
       </section>
 
       {pendingSlot && !token && (
-        <section className="authPanel">
+        <section className="authPanel" ref={authPanelRef}>
           <p className="eyebrow">One last step</p>
           <h2>{authMode === "signup" ? "Create your passenger account" : "Welcome back"}</h2>
           <p>Sign in to hold this aircraft for five minutes.</p>
