@@ -746,6 +746,27 @@ body {
   cursor: not-allowed;
 }
 
+.chatFab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--brass);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  transition: transform 0.15s ease;
+}
+
+.chatFab:hover {
+  transform: scale(1.08);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

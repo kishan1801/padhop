@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useState, useRef, useEffect } from "react";
-import { MapPin, Plane, Clock, Users, Loader2 } from "lucide-react";
+import { MapPin, Plane, Clock, Users, Loader2, MessageCircle } from "lucide-react";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 type Helipad = {
   id: string;
@@ -166,6 +167,9 @@ export default function SearchPage() {
   return (
     <main className="page">
       <ThemeToggle />
+      <Link href="/assistant" className="chatFab" aria-label="Chat with PadHop Assistant">
+        <MessageCircle size={22} />
+      </Link>
       <section className="hero">
         <Image
           src="https://images.unsplash.com/photo-1557818673-effec50525e1?q=80&w=1600&auto=format&fit=crop"
