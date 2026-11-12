@@ -1,7 +1,7 @@
 generator client {
   provider        = "prisma-client"
   output          = "../generated/prisma"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "partialIndexes"]
   moduleFormat    = "cjs"
 }
 
@@ -110,7 +110,7 @@ model AvailabilitySlot {
 
   aircraft Aircraft @relation(fields: [aircraftId], references: [id])
   helipad  Helipad  @relation("originHelipad", fields: [helipadId], references: [id])
-  booking  Booking?
+  bookings Booking[]
 
   @@map("availability_slots")
 }
@@ -118,7 +118,7 @@ model AvailabilitySlot {
 model Booking {
   id                   String        @id @default(uuid())
   userId               String        @map("user_id")
-  slotId               String        @unique @map("slot_id")
+  slotId               String        @map("slot_id")
   destinationHelipadId String        @map("destination_helipad_id")
   bookingType          BookingType   @map("booking_type")
   status               BookingStatus @default(held)
@@ -130,6 +130,7 @@ model Booking {
   destinationHelipad Helipad          @relation("destinationHelipad", fields: [destinationHelipadId], references: [id])
   payment            Payment?
 
+  @@unique([slotId], where: raw("\"status\" IN ('held', 'confirmed')"), map: "bookings_active_slot_id_key")
   @@map("bookings")
 }
 

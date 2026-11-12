@@ -1,21 +1,26 @@
 import {
+  BadRequestException,
   Injectable,
   ConflictException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PricingService } from '../pricing/pricing.service';
+import type { PassengerBookingDto } from './dto/passenger-booking.dto';
 
 const HOLD_TTL_SECONDS = 5 * 60; // 5 minutes
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
     private pricing: PricingService,
-  ) { }
+  ) {}
 
   async holdSlot(
     slotId: string,
@@ -28,11 +33,37 @@ export class BookingsService {
     });
     if (!slot) throw new NotFoundException('Slot not found');
 
-    const { totalPrice } = await this.pricing.calculatePrice(slot.helipadId, slot.aircraft.capacity);
+    if (
+      !Number.isFinite(slot.startTime.getTime()) ||
+      !Number.isFinite(slot.endTime.getTime()) ||
+      slot.endTime <= slot.startTime
+    ) {
+      throw new BadRequestException('Slot has an invalid schedule');
+    }
+
+    const now = new Date();
+    if (
+      slot.status !== 'available' ||
+      slot.startTime <= now ||
+      slot.endTime <= now
+    ) {
+      throw new ConflictException('Slot is no longer available');
+    }
+
+    const { totalPrice } = await this.pricing.calculatePrice(
+      slot.helipadId,
+      slot.aircraft.capacity,
+    );
 
     const booking = await this.prisma.$transaction(async (tx) => {
+      const eligibilityTime = new Date();
       const updated = await tx.availabilitySlot.updateMany({
-        where: { id: slotId, status: 'available' },
+        where: {
+          id: slotId,
+          status: 'available',
+          startTime: { gt: eligibilityTime },
+          endTime: { gt: eligibilityTime },
+        },
         data: { status: 'held' },
       });
 
@@ -62,6 +93,37 @@ export class BookingsService {
     };
   }
 
+  async getPassengerBookings(userId: string): Promise<PassengerBookingDto[]> {
+    const bookings = await this.prisma.booking.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        price: true,
+        createdAt: true,
+        slot: {
+          select: {
+            startTime: true,
+            endTime: true,
+            aircraft: { select: { model: true, capacity: true } },
+            helipad: { select: { name: true, city: true } },
+          },
+        },
+        destinationHelipad: { select: { name: true, city: true } },
+      },
+    });
+
+    return bookings.map((booking) => ({
+      bookingId: booking.id,
+      status: booking.status,
+      price: Number(booking.price),
+      createdAt: booking.createdAt,
+      slot: booking.slot,
+      destinationHelipad: booking.destinationHelipad,
+    }));
+  }
+
   async confirmSlot(slotId: string, userId: string) {
     const heldBy = await this.redis.get(`hold:${slotId}`);
     if (heldBy !== userId) {
@@ -71,12 +133,10 @@ export class BookingsService {
     }
 
     const booking = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.booking.findUnique({ where: { slotId } });
-      if (
-        !existing ||
-        existing.userId !== userId ||
-        existing.status !== 'held'
-      ) {
+      const existing = await tx.booking.findFirst({
+        where: { slotId, userId, status: 'held' },
+      });
+      if (!existing || existing.userId !== userId) {
         throw new ConflictException('Slot is not currently held by you');
       }
 
@@ -93,7 +153,14 @@ export class BookingsService {
       });
     });
 
-    await this.redis.del(`hold:${slotId}`);
+    try {
+      await this.redis.del(`hold:${slotId}`);
+    } catch (error) {
+      const errorType = error instanceof Error ? error.name : 'UnknownError';
+      this.logger.warn(
+        `Confirmed booking ${booking.id}; Redis hold-key cleanup failed (${errorType}). The key will expire by TTL.`,
+      );
+    }
 
     return { bookingId: booking.id, slotId, status: 'confirmed' };
   }
@@ -111,17 +178,22 @@ export class BookingsService {
     for (const slot of heldSlots) {
       const stillHeld = await this.redis.exists(`hold:${slot.id}`);
       if (!stillHeld) {
-        // Redis key expired (TTL ran out) but the DB still says 'held' - release it
-        await this.prisma.$executeRaw`
-        UPDATE availability_slots
-        SET status = 'available'
-        WHERE id = ${slot.id} AND status = 'held'
-      `;
-        await this.prisma.booking.updateMany({
-          where: { slotId: slot.id, status: 'held' },
-          data: { status: 'cancelled' },
+        const released = await this.prisma.$transaction(async (tx) => {
+          const released = await tx.availabilitySlot.updateMany({
+            where: { id: slot.id, status: 'held' },
+            data: { status: 'available' },
+          });
+          if (released.count === 0) return false;
+
+          await tx.booking.updateMany({
+            where: { slotId: slot.id, status: 'held' },
+            data: { status: 'cancelled' },
+          });
+          return true;
         });
-        console.log(`Released expired hold on slot ${slot.id}`);
+        if (released) {
+          console.log(`Released expired hold on slot ${slot.id}`);
+        }
       }
     }
   }

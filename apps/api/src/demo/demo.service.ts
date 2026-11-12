@@ -9,7 +9,7 @@ const DEMO_AIRCRAFT_REGISTRATION = 'VT-TEST1';
 export class DemoService {
   private readonly logger = new Logger(DemoService.name);
 
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async replenishDemoAvailability() {

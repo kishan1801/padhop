@@ -6,7 +6,6 @@
         "name": "next"
       }
     ],
-    "ignoreDeprecations": "6.0",
     "strictNullChecks": true,
     "paths": {
       "@/*": ["./*"]

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState, useRef, useEffect } from "react";
 import { Send, Plane } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { AppShell } from "@/components/app-shell";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -51,11 +51,11 @@ export default function AssistantPage() {
   }
 
   return (
-    <main className="dashPage assistantPage">
-      <ThemeToggle />
+    <AppShell><main className="dashPage assistantPage">
       <div className="dashHeader">
-        <p className="eyebrow">PadHop Assistant</p>
-        <h1>Ask about charters</h1>
+        <p className="eyebrow">Flight concierge</p>
+        <h1>Plan with confidence</h1>
+        <p>Ask about nearby helipads, current availability, or flight-weather conditions.</p>
       </div>
 
       <div className="chatWindow">
@@ -91,6 +91,6 @@ export default function AssistantPage() {
           <Send size={16} />
         </button>
       </form>
-    </main>
+    </main></AppShell>
   );
 }

@@ -7,4 +7,4 @@ import { HelipadsService } from './helipads.service';
   providers: [HelipadsService],
   exports: [HelipadsService],
 })
-export class HelipadsModule { }
+export class HelipadsModule {}

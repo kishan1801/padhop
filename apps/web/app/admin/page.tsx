@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { ShieldCheck, Building2, CheckCircle2 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ShieldCheck, Building2, CheckCircle2, Clock3 } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
 
 type PendingOperator = {
   id: string;
@@ -93,8 +93,7 @@ export default function AdminPage() {
 
   if (!token) {
     return (
-      <main className="dashPage">
-        <ThemeToggle />
+      <AppShell><main className="dashPage">
         <div className="dashAuthCard">
           <p className="eyebrow">Admin</p>
           <h1>Sign in to review operators</h1>
@@ -107,16 +106,16 @@ export default function AdminPage() {
           </form>
           {message && <p className="notice error">{message}</p>}
         </div>
-      </main>
+      </main></AppShell>
     );
   }
 
   return (
-    <main className="dashPage">
-      <ThemeToggle />
+    <AppShell><main className="dashPage">
       <div className="dashHeader">
-        <p className="eyebrow">Admin</p>
-        <h1>Pending operators</h1>
+        <p className="eyebrow">Administration</p>
+        <h1>Operator verification queue</h1>
+        <p>Review and activate operator accounts before they publish aircraft availability.</p>
       </div>
 
       {message && <p className="notice">{message}</p>}
@@ -124,14 +123,14 @@ export default function AdminPage() {
       {loadingPending && <p className="hint">Loading…</p>}
 
       {pending && pending.length === 0 && (
-        <p className="hint">
+        <p className="hint emptyHint">
           <CheckCircle2 size={16} /> No operators awaiting verification right now.
         </p>
       )}
 
       <div className="fleetList">
         {pending?.map((op) => (
-          <div key={op.id} className="dashCard">
+          <div key={op.id} className="dashCard approvalCard">
             <div className="dashCardTop">
               <div className="cardIcon">
                 <Building2 size={20} />
@@ -139,7 +138,7 @@ export default function AdminPage() {
               <div>
                 <h2>{op.companyName}</h2>
                 <p className="cardCity">
-                  Registered {new Date(op.createdAt).toLocaleDateString([], { dateStyle: "medium" })}
+                  <Clock3 size={13} /> Registered {new Date(op.createdAt).toLocaleDateString([], { dateStyle: "medium" })}
                 </p>
               </div>
             </div>
@@ -149,6 +148,6 @@ export default function AdminPage() {
           </div>
         ))}
       </div>
-    </main>
+    </main></AppShell>
   );
 }

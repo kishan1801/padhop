@@ -13,9 +13,13 @@ export type WeatherRisk = {
 
 @Injectable()
 export class WeatherService {
-  constructor(private http: HttpService) { }
+  constructor(private http: HttpService) {}
 
-  async getFlightRisk(latitude: number, longitude: number, isoTime: string): Promise<WeatherRisk> {
+  async getFlightRisk(
+    latitude: number,
+    longitude: number,
+    isoTime: string,
+  ): Promise<WeatherRisk> {
     const url = `https://api.open-meteo.com/v1/forecast`;
     const { data } = await firstValueFrom(
       this.http.get(url, {
@@ -29,7 +33,9 @@ export class WeatherService {
     );
 
     const targetHour = isoTime.slice(0, 13); // "2026-08-28T10"
-    const index = data.hourly.time.findIndex((t: string) => t.startsWith(targetHour));
+    const index = data.hourly.time.findIndex((t: string) =>
+      t.startsWith(targetHour),
+    );
 
     if (index === -1) {
       return {
@@ -38,7 +44,9 @@ export class WeatherService {
         precipitationMm: 0,
         visibilityKm: 0,
         verdict: 'caution',
-        reasons: ['No forecast data available for this time - treat with caution'],
+        reasons: [
+          'No forecast data available for this time - treat with caution',
+        ],
       };
     }
 
@@ -49,13 +57,19 @@ export class WeatherService {
     return this.score(windSpeedKmh, precipitationMm, visibilityKm);
   }
 
-  private score(windSpeedKmh: number, precipitationMm: number, visibilityKm: number): WeatherRisk {
+  private score(
+    windSpeedKmh: number,
+    precipitationMm: number,
+    visibilityKm: number,
+  ): WeatherRisk {
     let score = 100;
     const reasons: string[] = [];
 
     if (windSpeedKmh > 55) {
       score -= 50;
-      reasons.push(`High wind speed (${windSpeedKmh.toFixed(0)} km/h) - exceeds typical safe operating limits`);
+      reasons.push(
+        `High wind speed (${windSpeedKmh.toFixed(0)} km/h) - exceeds typical safe operating limits`,
+      );
     } else if (windSpeedKmh > 35) {
       score -= 20;
       reasons.push(`Elevated wind speed (${windSpeedKmh.toFixed(0)} km/h)`);
@@ -82,6 +96,13 @@ export class WeatherService {
     const verdict = score >= 70 ? 'good' : score >= 40 ? 'caution' : 'unsafe';
     if (reasons.length === 0) reasons.push('Clear conditions');
 
-    return { score, windSpeedKmh, precipitationMm, visibilityKm, verdict, reasons };
+    return {
+      score,
+      windSpeedKmh,
+      precipitationMm,
+      visibilityKm,
+      verdict,
+      reasons,
+    };
   }
 }

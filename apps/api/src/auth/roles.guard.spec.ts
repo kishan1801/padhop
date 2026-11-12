@@ -45,7 +45,10 @@ describe('RolesGuard', () => {
 
   it('allows the request through if the user has the required role', async () => {
     reflector.getAllAndOverride.mockReturnValue(['operator']);
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', role: 'operator' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'operator',
+    });
 
     const result = await guard.canActivate(mockContext('user-1'));
 
@@ -54,7 +57,10 @@ describe('RolesGuard', () => {
 
   it('throws ForbiddenException if the user does not have the required role', async () => {
     reflector.getAllAndOverride.mockReturnValue(['operator']);
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', role: 'passenger' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'passenger',
+    });
 
     await expect(guard.canActivate(mockContext('user-1'))).rejects.toThrow(
       ForbiddenException,

@@ -14,7 +14,7 @@ import { WeatherModule } from './weather/weather.module';
 import { PricingModule } from './pricing/pricing.module';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { DemoModule } from './demo/demo.module'
+import { DemoModule } from './demo/demo.module';
 
 @Module({
   imports: [
@@ -33,9 +33,6 @@ import { DemoModule } from './demo/demo.module'
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule { }
+export class AppModule {}

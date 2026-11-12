@@ -1,14 +1,24 @@
-import { Injectable, ForbiddenException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AircraftService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async listMine(userId: string) {
-    const operator = await this.prisma.operator.findUnique({ where: { userId } });
+    const operator = await this.prisma.operator.findUnique({
+      where: { userId },
+    });
     if (!operator) {
-      throw new ForbiddenException('Only registered operators can view their fleet');
+      throw new ForbiddenException(
+        'Only registered operators can view their fleet',
+      );
     }
 
     return this.prisma.aircraft.findMany({
@@ -21,26 +31,51 @@ export class AircraftService {
     });
   }
 
-  async create(userId: string, model: string, capacity: number, registration: string) {
-    const operator = await this.prisma.operator.findUnique({ where: { userId } });
-    if (!operator) {
-      throw new ForbiddenException('Only registered operators can add aircraft');
+  async create(
+    userId: string,
+    model: string,
+    capacity: number,
+    registration: string,
+  ) {
+    const normalizedModel = model?.trim();
+    const normalizedRegistration = registration?.trim().toUpperCase();
+
+    if (!normalizedModel || !normalizedRegistration) {
+      throw new BadRequestException('Model and registration are required');
     }
-    if (!operator.verified) {
-      throw new ForbiddenException('Your operator account is pending verification');
+    if (!Number.isInteger(capacity) || capacity < 1) {
+      throw new BadRequestException('Capacity must be a positive whole number');
     }
 
-    const existing = await this.prisma.aircraft.findUnique({ where: { registration } });
+    const operator = await this.prisma.operator.findUnique({
+      where: { userId },
+    });
+    if (!operator) {
+      throw new ForbiddenException(
+        'Only registered operators can add aircraft',
+      );
+    }
+    if (!operator.verified) {
+      throw new ForbiddenException(
+        'Your operator account is pending verification',
+      );
+    }
+
+    const existing = await this.prisma.aircraft.findUnique({
+      where: { registration: normalizedRegistration },
+    });
     if (existing) {
-      throw new ConflictException('An aircraft with this registration already exists');
+      throw new ConflictException(
+        'An aircraft with this registration already exists',
+      );
     }
 
     return this.prisma.aircraft.create({
       data: {
         operatorId: operator.id,
-        model,
+        model: normalizedModel,
         capacity,
-        registration,
+        registration: normalizedRegistration,
       },
     });
   }
@@ -52,21 +87,44 @@ export class AircraftService {
     startTime: Date,
     endTime: Date,
   ) {
-    const operator = await this.prisma.operator.findUnique({ where: { userId } });
-    if (!operator) {
-      throw new ForbiddenException('Only registered operators can manage slots');
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      throw new BadRequestException('Start and end times must be valid dates');
     }
-    if (!operator.verified) {
-      throw new ForbiddenException('Your operator account is pending verification');
+    if (startTime <= new Date()) {
+      throw new BadRequestException('Start time must be in the future');
     }
 
-    const aircraft = await this.prisma.aircraft.findUnique({ where: { id: aircraftId } });
+    const operator = await this.prisma.operator.findUnique({
+      where: { userId },
+    });
+    if (!operator) {
+      throw new ForbiddenException(
+        'Only registered operators can manage slots',
+      );
+    }
+    if (!operator.verified) {
+      throw new ForbiddenException(
+        'Your operator account is pending verification',
+      );
+    }
+
+    const aircraft = await this.prisma.aircraft.findUnique({
+      where: { id: aircraftId },
+    });
     if (!aircraft || aircraft.operatorId !== operator.id) {
       throw new ForbiddenException('This aircraft does not belong to you');
     }
 
     if (endTime <= startTime) {
-      throw new ConflictException('End time must be after start time');
+      throw new BadRequestException('End time must be after start time');
+    }
+
+    const helipad = await this.prisma.helipad.findUnique({
+      where: { id: helipadId },
+      select: { id: true },
+    });
+    if (!helipad) {
+      throw new NotFoundException('Helipad not found');
     }
 
     return this.prisma.availabilitySlot.create({

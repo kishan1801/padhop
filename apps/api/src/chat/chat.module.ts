@@ -9,4 +9,4 @@ import { WeatherModule } from '../weather/weather.module';
   controllers: [ChatController],
   providers: [ChatService],
 })
-export class ChatModule { }
+export class ChatModule {}

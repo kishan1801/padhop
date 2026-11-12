@@ -8,13 +8,17 @@ const tools: Groq.Chat.Completions.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'search_helipads',
-      description: 'Find helipads near a given latitude/longitude with live availability',
+      description:
+        'Find helipads near a given latitude/longitude with live availability',
       parameters: {
         type: 'object',
         properties: {
           latitude: { type: 'number' },
           longitude: { type: 'number' },
-          radiusKm: { type: 'number', description: 'Search radius in km, default 50' },
+          radiusKm: {
+            type: 'number',
+            description: 'Search radius in km, default 50',
+          },
         },
         required: ['latitude', 'longitude'],
       },
@@ -30,7 +34,10 @@ const tools: Groq.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           latitude: { type: 'number' },
           longitude: { type: 'number' },
-          isoTime: { type: 'string', description: 'ISO 8601 date-time, e.g. 2026-09-05T14:00:00' },
+          isoTime: {
+            type: 'string',
+            description: 'ISO 8601 date-time, e.g. 2026-09-05T14:00:00',
+          },
         },
         required: ['latitude', 'longitude', 'isoTime'],
       },
@@ -45,7 +52,7 @@ export class ChatService {
   constructor(
     private helipadsService: HelipadsService,
     private weatherService: WeatherService,
-  ) { }
+  ) {}
 
   async chat(userMessage: string): Promise<string> {
     const messages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -53,9 +60,9 @@ export class ChatService {
         role: 'system',
         content:
           "You are PadHop's helicopter charter assistant for India. You ONLY discuss helicopter charter availability, helipad locations, flight-weather conditions, and how PadHop's booking process works. " +
-          "CRITICAL RULE: You must NEVER invent, guess, or suggest helipad names, aircraft, or availability that did not come directly from a tool result. If search_helipads returns an empty list, tell the user honestly that there is no availability right now near that location - do not list alternative helipads unless they were actually returned by the tool. " +
-          "You cannot complete or confirm bookings yourself - you can only share information. If asked to book something, explain that you can check availability and weather, but the user needs to complete the booking themselves on the PadHop app. " +
-          "If asked about anything unrelated to PadHop, politely decline and redirect. Use the available tools for any factual claims. Be concise and specific. Bengaluru city center is roughly latitude 12.9716, longitude 77.5946.",
+          'CRITICAL RULE: You must NEVER invent, guess, or suggest helipad names, aircraft, or availability that did not come directly from a tool result. If search_helipads returns an empty list, tell the user honestly that there is no availability right now near that location - do not list alternative helipads unless they were actually returned by the tool. ' +
+          'You cannot complete or confirm bookings yourself - you can only share information. If asked to book something, explain that you can check availability and weather, but the user needs to complete the booking themselves on the PadHop app. ' +
+          'If asked about anything unrelated to PadHop, politely decline and redirect. Use the available tools for any factual claims. Be concise and specific. Bengaluru city center is roughly latitude 12.9716, longitude 77.5946.',
       },
       { role: 'user', content: userMessage },
     ];
@@ -73,7 +80,6 @@ export class ChatService {
       console.log('Tool calls:', JSON.stringify(choice.tool_calls, null, 2));
 
       messages.push(choice);
-
 
       if (!choice.tool_calls || choice.tool_calls.length === 0) {
         return choice.content ?? 'I could not find an answer to that.';

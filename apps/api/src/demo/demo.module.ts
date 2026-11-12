@@ -4,4 +4,4 @@ import { DemoService } from './demo.service';
 @Module({
   providers: [DemoService],
 })
-export class DemoModule { }
+export class DemoModule {}

@@ -1,5 +1,24 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { HelipadsService } from './helipads.service';
+
+function parseQueryNumber(value: string | undefined, name: string): number {
+  if (!value?.trim()) {
+    throw new BadRequestException(`${name} must be a valid number`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new BadRequestException(`${name} must be a valid number`);
+  }
+
+  return parsed;
+}
 
 @Controller('helipads')
 export class HelipadsController {
@@ -12,14 +31,16 @@ export class HelipadsController {
 
   @Get('nearest')
   async nearest(
-    @Query('lat') lat: string,
-    @Query('lng') lng: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
     @Query('radiusKm') radiusKm?: string,
   ) {
     return this.helipadsService.findNearest(
-      parseFloat(lat),
-      parseFloat(lng),
-      radiusKm ? parseFloat(radiusKm) : undefined,
+      parseQueryNumber(lat, 'lat'),
+      parseQueryNumber(lng, 'lng'),
+      radiusKm === undefined
+        ? undefined
+        : parseQueryNumber(radiusKm, 'radiusKm'),
     );
   }
 

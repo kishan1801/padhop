@@ -5,14 +5,23 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg: #eef4fb;
-  --panel: #ffffff;
+  --bg: #edf3fb;
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-strong: #ffffff;
+  --panel-muted: #f6f8fc;
   --panel-border: #d7e3f0;
   --brass: #a8760f;
   --brass-dim: #7d5a0c;
+  --brass-soft: rgba(168, 118, 15, 0.12);
   --text-primary: #16233a;
   --text-secondary: #5c7290;
   --available: #2a7a54;
+  --focus-ring: rgba(168, 118, 15, 0.22);
+  --shadow-soft: 0 14px 32px rgba(16, 26, 42, 0.08);
+  --shadow-panel: 0 18px 42px rgba(16, 26, 42, 0.1);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
 
   --font-display: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
@@ -60,6 +69,192 @@ body {
   padding: 0;
 }
 
+.appShell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(168, 118, 15, 0.12), transparent 32rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+    var(--bg);
+}
+
+.appNav {
+  position: relative;
+  z-index: 20;
+  width: min(1120px, calc(100% - 2rem));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.brand,
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.brand {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--text-primary);
+  color: var(--panel-strong);
+  font-size: 0.82rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.appNavLinks {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.navLink {
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.navLinkSecondary {
+  opacity: 0.78;
+}
+
+.navLinkSecondary:hover,
+.navLinkSecondary.active {
+  opacity: 1;
+}
+
+.navLink:hover {
+  background: var(--panel);
+  border-color: var(--panel-border);
+  color: var(--text-primary);
+}
+
+.navLink.active {
+  background: var(--panel);
+  border-color: var(--panel-border);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(168, 118, 15, 0.08);
+}
+
+.navLink:focus-visible,
+.brand:focus-visible,
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.appNav .theme-toggle {
+  position: static;
+  padding: 0.55rem 0.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  min-width: 38px;
+  min-height: 38px;
+  box-shadow: none;
+}
+
+.appNavActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mobileNavToggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.mobileNavToggle:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+@media (max-width: 850px) {
+  .appNav {
+    min-height: 62px;
+  }
+
+  .appNavLinks {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    left: 0;
+    display: none;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0.6rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    background: var(--panel-strong);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .appNavLinks.isOpen {
+    display: flex;
+  }
+
+  .navLink {
+    padding: 0.7rem 0.75rem;
+    font-size: 0.88rem;
+  }
+
+  .navLinkSecondary {
+    margin-top: 0.15rem;
+    border-top: 1px solid var(--panel-border);
+    border-radius: 0;
+  }
+
+  .mobileNavToggle {
+    display: inline-flex;
+  }
+}
+
+.dashHeader > p:not(.eyebrow) { max-width: 570px; margin: .75rem auto 0; color: var(--text-secondary); line-height: 1.55; }
+.statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin: 0 0 1.5rem; }
+.statCard { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: .1rem .55rem; padding: 1rem; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel); }
+.statCard svg { grid-row: span 2; color: var(--brass); margin-top: .15rem; }.statCard span { font: 700 1.3rem/1 var(--font-display); }.statCard small { color: var(--text-secondary); font-size: .75rem; }
+.dashCard { box-shadow: 0 10px 25px rgba(18, 35, 58, .04); }.aircraftCard, .approvalCard { animation: fadeUp .35s ease backwards; }.aircraftCard:hover, .approvalCard:hover { border-color: color-mix(in srgb, var(--brass) 50%, var(--panel-border)); }
+.emptyState { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1rem; }.emptyState .inlineForm { grid-column: 2; }.emptyState h2 { margin: 0 0 .4rem; font: 600 1.15rem var(--font-display); }.emptyState p:not(.sectionLabel) { color: var(--text-secondary); margin: 0; line-height: 1.5; }.sectionLabel { margin: 0 0 .3rem; color: var(--brass); font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }.emptyIcon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--brass) 14%, var(--panel)); color: var(--brass); }
+.addAircraftButton { margin-top: .25rem; }.approvalCard .dashCardTop { justify-content: space-between; }.emptyHint { border: 1px dashed var(--panel-border); border-radius: 14px; background: var(--panel); }
+.assistantPage .dashHeader { text-align: left; }.assistantPage .dashHeader > p:not(.eyebrow) { margin-left: 0; }.chatWindow { padding: 1.25rem; border: 1px solid var(--panel-border); border-radius: 16px; background: color-mix(in srgb, var(--panel) 85%, transparent); }.chatBubble { animation: fadeUp .2s ease both; }.chatInputForm { position: sticky; bottom: 0; background: var(--bg); }
+
+@media (max-width: 680px) {
+  .statGrid { grid-template-columns: repeat(2, 1fr); }.emptyState { grid-template-columns: 1fr; }.emptyState .inlineForm { grid-column: 1; }.dashPage { padding-top: 2.5rem; }.chatWindow { padding: .8rem; }
+}
+
 body {
   background: var(--bg);
   color: var(--text-primary);
@@ -75,36 +270,83 @@ body {
 
 .hero {
   position: relative;
-  height: 640px;
+  min-height: 660px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
+  justify-content: flex-start;
+  padding: 3.5rem max(1.5rem, calc((100vw - 1120px) / 2));
   overflow: hidden;
+  isolation: isolate;
+  background: #0d1526;
+}
+
+.heroVisual {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.heroVisual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(7, 14, 27, 0.92) 0%, rgba(7, 14, 27, 0.82) 34%, rgba(7, 14, 27, 0.42) 60%, rgba(7, 14, 27, 0.08) 100%),
+    linear-gradient(0deg, #0d1526 0%, rgba(13, 21, 38, 0.34) 28%, transparent 64%);
+}
+
+.heroParticles {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 660px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.22;
+}
+
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--brass);
+  opacity: 0.4;
+  top: 100%;
+  animation: particleFloat linear infinite;
+  left: calc(var(--i, 0) * 8%);
+}
+
+@keyframes particleFloat {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(20px);
+    opacity: 0;
+  }
 }
 
 .heroImage {
   object-fit: cover;
-  object-position: center 58%;
+  object-position: 68% 54%;
   z-index: 0;
-}
-
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg,
-      rgba(6, 10, 20, 0.75) 0%,
-      rgba(6, 10, 20, 0.55) 40%,
-      rgba(6, 10, 20, 0.92) 100%);
-  z-index: 0;
+  transform-origin: center center;
+  animation: heroZoom 1.6s ease-out;
 }
 
 .heroContent {
   position: relative;
-  z-index: 1;
-  max-width: 640px;
-  text-align: center;
+  z-index: 2;
+  width: min(100%, 720px);
+  text-align: left;
 }
 
 .eyebrow {
@@ -120,18 +362,67 @@ body {
 .hero h1 {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(2.2rem, 5.5vw, 3.4rem);
-  line-height: 1.1;
+  font-size: clamp(2.65rem, 5.2vw, 4.5rem);
+  line-height: 1.02;
   margin: 0 0 1rem;
   color: #f5f6f8;
   text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
 }
 
+.heroHeadline {
+  max-width: 12ch;
+}
+
+.hero h1 .word {
+  display: block;
+}
+
+.hero h1 .word:not(:first-child) {
+  margin-left: 0;
+}
+
 .subhead {
+  max-width: 39rem;
   color: #d7dae2;
-  font-size: 1.1rem;
-  line-height: 1.5;
-  margin: 0 0 2.5rem;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  margin: 0 0 1.5rem;
+}
+
+.heroCtas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.heroCtas .searchButton,
+.heroCtas .searchButtonSecondary {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.heroCtas .searchButtonSecondary {
+  color: #f1f3f6;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.heroCtas .searchButtonSecondary:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: var(--brass);
+}
+
+.hero .searchPanel .searchButtonSecondary {
+  color: #e4e9f1;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.hero .searchPanel .searchButtonSecondary:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: var(--brass);
 }
 
 .searchPanel {
@@ -139,12 +430,22 @@ body {
   gap: 0.75rem;
   align-items: flex-end;
   justify-content: center;
+  max-width: 760px;
   background: rgba(18, 27, 46, 0.65);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   padding: 1.25rem;
   flex-wrap: wrap;
+}
+
+.searchPanel,
+#results {
+  scroll-margin-top: 1rem;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 .field {
@@ -189,16 +490,79 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  transition: opacity 0.15s ease;
+  transition: all 0.15s ease;
+  transform: translate3d(0, 0, 0);
+  overflow: hidden;
 }
 
 .searchButton:hover:not(:disabled) {
   opacity: 0.9;
+  transform: translate3d(0, -2px, 0);
+}
+
+.searchButton::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transition: left 0.5s ease;
+  pointer-events: none;
+}
+
+.searchButton:hover::after {
+  left: 100%;
 }
 
 .searchButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.searchButtonSecondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.7rem 1.2rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  transform: translate3d(0, 0, 0);
+  overflow: hidden;
+}
+
+.searchButtonSecondary:hover:not(:disabled) {
+  border-color: var(--brass);
+  color: var(--text-primary);
+  transform: translate3d(0, -2px, 0);
+}
+
+.searchButtonSecondary:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.btnContent {
+  position: relative;
+  z-index: 1;
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border-radius: 10px;
+  transform: translateX(-10px);
+  opacity: 0;
+  animation: slideInRight 0.3s ease-out forwards;
 }
 
 .authPanel,
@@ -299,14 +663,8 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: 14px;
   padding: 1.1rem 1.4rem;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  animation: fadeUp 0.35s ease backwards;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  border-color: var(--brass);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
 }
 
 @keyframes fadeUp {
@@ -318,6 +676,149 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Fade-up animation for page elements */
+.animate-in {
+  animation: fadeUp 0.5s ease-out backwards;
+}
+
+/* Word wrap split animation */
+.word {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.word:not(:first-child) {
+  margin-left: 0.5rem;
+}
+
+.highlight {
+  color: var(--brass);
+  font-weight: 700;
+}
+
+/* Magnetic button effect */
+.magnetic {
+  position: relative;
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.15s ease-out;
+}
+
+.magnetic:hover:not(:disabled) {
+  transform: translate3d(0, -2px, 0);
+}
+
+/* Button ripple effect */
+.btnRipple {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, transparent 70%);
+  transform: scale(0);
+  animation: ripple 0.3s ease-out;
+  pointer-events: none;
+  opacity: 0;
+}
+
+@keyframes ripple {
+  to {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Animated input fields */
+.animatedInput {
+  transition: all 0.2s ease;
+}
+
+.animatedInput:focus-visible {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
+  background: rgba(18, 27, 46, 0.8);
+}
+
+/* Pulsing badge for live availability */
+.pulse-badge {
+  position: relative;
+}
+
+.pulse-badge::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--available);
+  border-radius: 50%;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.pulse-badge::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--available);
+  opacity: 0;
+  animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--available) 60%, transparent);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.4);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--available) 0%, transparent);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.8);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--available) 0%, transparent);
+  }
+}
+
+/* 3D tilt card perspective */
+.tilt-card {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+@keyframes heroZoom {
+  from {
+    transform: scale(1.04);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Slot slide-in animation */
+@keyframes slideInRight {
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 
@@ -373,17 +874,55 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  overflow: hidden;
 }
 
-.slot {
+.slotSkeleton {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  padding: 0.7rem 0.9rem;
-  background: var(--bg);
-  border-radius: 10px;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.1rem 0;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--panel) 0%, color-mix(in srgb, var(--panel-border) 80%, var(--panel)) 50%, var(--panel) 100%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+  overflow: hidden;
+}
+
+.skeleton-line-long {
+  width: 100%;
+}
+
+.skeleton-line-medium {
+  width: 72%;
+}
+
+.skeleton-line-short {
+  width: 48%;
+}
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.charterCount {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+.charterCountValue {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
 }
 
 .slotInfo {
@@ -411,9 +950,109 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .heroImage,
+  .card,
+  .pulse-badge::before,
+  .pulse-badge::after,
+  .charterCount,
+  .skeleton-line,
+  .slotSkeleton {
     animation: none !important;
-    transition: none !important;
+  }
+
+  .card,
+  .tilt-card {
+    transform: none !important;
+    perspective: none !important;
+  }
+
+  .heroImage {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    min-height: 620px;
+  }
+
+  .heroParticles {
+    height: 620px;
+  }
+}
+
+@media (max-width: 680px) {
+  .hero {
+    display: block;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .heroVisual {
+    position: relative;
+    inset: auto;
+    height: clamp(250px, 64vw, 360px);
+  }
+
+  .heroVisual::after {
+    background: linear-gradient(180deg, rgba(7, 14, 27, 0.06) 0%, rgba(7, 14, 27, 0.08) 60%, #0d1526 100%);
+  }
+
+  .heroImage {
+    object-position: 100% 54%;
+  }
+
+  .heroParticles {
+    height: 350px;
+  }
+
+  .heroContent {
+    width: 100%;
+    padding: 0 1.1rem 2rem;
+    background: #0d1526;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.45rem, 10vw, 3.5rem);
+    max-width: 11ch;
+  }
+
+  .subhead {
+    font-size: 0.98rem;
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+  }
+
+  .heroCtas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+
+  .heroCtas .searchButton,
+  .heroCtas .searchButtonSecondary {
+    padding: 0.7rem 0.8rem;
+    font-size: 0.86rem;
+  }
+
+  .searchPanel {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .field select,
+  .searchPanel .searchButton,
+  .searchPanel .searchButtonSecondary {
+    width: 100%;
   }
 }
 
@@ -508,45 +1147,27 @@ body {
   position: fixed;
   top: 1.25rem;
   right: 1.25rem;
-  background: var(--panel);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.8);
   color: var(--text-primary);
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 0.5rem 1rem;
+  border-radius: 12px;
   font-family: var(--font-body);
   font-size: 0.85rem;
   cursor: pointer;
   z-index: 10;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .theme-toggle:hover {
   border-color: var(--brass);
-}
-
-.theme-toggle:focus-visible {
-  outline: 2px solid var(--brass);
-  outline-offset: 2px;
-}
-
-.searchButtonSecondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 0.7rem 1.2rem;
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.searchButtonSecondary:hover:not(:disabled) {
-  border-color: var(--brass);
-  color: var(--text-primary);
-}
-
-.searchButtonSecondary:focus-visible {
-  outline: 2px solid var(--brass);
-  outline-offset: 2px;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
 }
 
 
@@ -778,5 +1399,496 @@ body {
 
   html {
     @apply font-sans;
+  }
+}
+
+.journeysPage {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(3rem, 7vw, 5.5rem) 0 5rem;
+  color: var(--text-primary);
+}
+
+.journeysHeader {
+  max-width: 680px;
+  margin: 0 auto 3rem;
+  text-align: center;
+}
+
+.journeysHeader h1,
+.journeysMessage h2,
+.journeysAuthCard h2,
+.journeySectionHeader h2 {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.journeysHeader h1 {
+  margin: 0.35rem 0 0.6rem;
+  font-size: clamp(2.1rem, 4vw, 3.2rem);
+  letter-spacing: -0.045em;
+}
+
+.journeysHeader > p:last-child {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.journeysSections {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.journeySectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.journeySectionHeader .eyebrow {
+  margin: 0 0 0.25rem;
+}
+
+.journeySectionHeader h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: -0.025em;
+}
+
+.journeyCount {
+  display: grid;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.55rem;
+  place-items: center;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.journeyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.journeyCard {
+  min-width: 0;
+  padding: 1.25rem 1.35rem 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.journeyCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.journeyReference {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.journeyReference > span,
+.journeyDetail > div > span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.journeyReference code {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+}
+
+.journeyStatus {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.journeyStatus-held {
+  border-color: color-mix(in srgb, var(--brass) 35%, transparent);
+  background: var(--brass-soft);
+  color: var(--brass-dim);
+}
+
+.dark .journeyStatus-held {
+  color: #e3c56b;
+}
+
+.journeyStatus-confirmed {
+  border-color: color-mix(in srgb, var(--available) 35%, transparent);
+  background: color-mix(in srgb, var(--available) 12%, transparent);
+  color: var(--available);
+}
+
+.journeyStatus-cancelled {
+  border-color: #e7b5a9;
+  background: #fff2ef;
+  color: #934230;
+}
+
+.dark .journeyStatus-cancelled {
+  border-color: #6a3d3b;
+  background: #392626;
+  color: #ffb7a9;
+}
+
+.dark .journeyStatus-completed {
+  background: #1e2b43;
+}
+
+.journeyStatus-completed {
+  border-color: var(--panel-border);
+  background: var(--panel-muted);
+  color: var(--text-secondary);
+}
+
+.journeyAircraft {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 1.15rem 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.journeyAircraft > svg {
+  color: var(--brass);
+}
+
+.journeyAircraft > span {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.journeyRoute {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.journeyLocation {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.journeyLocation > span {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.journeyLocation strong {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.journeyLocation small,
+.journeyDetail small {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.journeyRouteArrow {
+  color: var(--brass);
+}
+
+.journeyDetails {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 0.8rem;
+  padding: 1rem 0 0.85rem;
+}
+
+.journeyDetail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.journeyDetail > svg,
+.journeyPriceMark {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: var(--brass);
+}
+
+.journeyPriceMark {
+  width: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.journeyDetail > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.journeyDetail strong {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.journeyCreated {
+  margin: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.journeySectionEmpty {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.journeysMessage,
+.journeysAuthCard {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.journeysEmptyIcon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--brass-soft);
+  color: var(--brass);
+}
+
+.journeysMessage h2,
+.journeysAuthCard h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.35rem;
+}
+
+.journeysMessage > p,
+.journeysAuthCard > p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.journeysEmpty .searchButton {
+  margin-top: 0.7rem;
+  text-decoration: none;
+}
+
+.journeysErrorPanel {
+  border-color: #d97757;
+}
+
+.journeysErrorPanel .searchButtonSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.journeysAuthForm {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  text-align: left;
+}
+
+.journeysAuthForm label {
+  margin-top: 0.3rem;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.journeysAuthForm input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.journeysAuthForm input:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.journeysAuthForm .searchButton {
+  margin-top: 0.55rem;
+}
+
+.journeysAuthHint {
+  margin: 1rem 0 0;
+  font-size: 0.8rem !important;
+}
+
+.journeysAuthHint a {
+  color: var(--brass-dim);
+  font-weight: 650;
+  text-underline-offset: 3px;
+}
+
+.dark .journeysAuthHint a {
+  color: #e3c56b;
+}
+
+.journeysNotice {
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--brass-soft);
+  color: var(--text-primary) !important;
+}
+
+.journeysError {
+  margin: 0.3rem 0;
+  color: #a34a37;
+  font-size: 0.82rem;
+}
+
+.dark .journeysError {
+  color: #ffb7a9;
+}
+
+.journeysDisclaimer {
+  margin: -1.5rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.journeySkeleton {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.35rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.journeySkeletonLine {
+  display: block;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-border) 25%,
+    color-mix(in srgb, var(--panel-border) 35%, var(--panel-strong)) 50%,
+    var(--panel-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: journeyShimmer 1.5s ease-in-out infinite;
+}
+
+.dark .journeySkeletonLine {
+  background: linear-gradient(90deg, #2a3a58 25%, #1e2b43 50%, #2a3a58 75%);
+  background-size: 200% 100%;
+}
+
+.journeySkeletonShort { width: 38%; }
+.journeySkeletonTitle { width: 64%; height: 1.1rem; }
+.journeySkeletonRoute { width: 100%; height: 4.5rem; }
+.journeySkeletonFooter { width: 52%; margin-top: auto; }
+
+@keyframes journeyShimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (max-width: 760px) {
+  .journeysPage {
+    width: min(100% - 1.25rem, 560px);
+    padding-top: 3rem;
+  }
+
+  .journeysHeader {
+    margin-bottom: 2rem;
+  }
+
+  .journeyGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journeysSections {
+    gap: 2.25rem;
+  }
+
+  .journeyCard {
+    padding: 1.1rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .journeyCardHeader {
+    flex-direction: column;
+  }
+
+  .journeyRoute {
+    gap: 0.45rem;
+  }
+
+  .journeyDetails {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

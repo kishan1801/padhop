@@ -17,7 +17,10 @@ describe('AircraftService', () => {
     };
 
     const module = await Test.createTestingModule({
-      providers: [AircraftService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        AircraftService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(AircraftService);
@@ -35,7 +38,13 @@ describe('AircraftService', () => {
       });
 
       await expect(
-        service.createSlot('user-1', 'aircraft-1', 'helipad-1', new Date(), new Date(Date.now() + 3600000)),
+        service.createSlot(
+          'user-1',
+          'aircraft-1',
+          'helipad-1',
+          new Date(Date.now() + 60_000),
+          new Date(Date.now() + 3_660_000),
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -46,7 +55,13 @@ describe('AircraftService', () => {
       });
 
       await expect(
-        service.createSlot('user-1', 'aircraft-1', 'helipad-1', new Date(), new Date(Date.now() + 3600000)),
+        service.createSlot(
+          'user-1',
+          'aircraft-1',
+          'helipad-1',
+          new Date(Date.now() + 60_000),
+          new Date(Date.now() + 3_660_000),
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });

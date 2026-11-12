@@ -38,13 +38,21 @@ describe('AuthService', () => {
 
     it('stores a bcrypt hash, never the plain-text password', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({ id: 'new-user', email: 'new@padhop.test' });
+      prisma.user.create.mockResolvedValue({
+        id: 'new-user',
+        email: 'new@padhop.test',
+      });
 
       await service.signup('Name', 'new@padhop.test', 'plaintext-password');
 
       const createArgs = prisma.user.create.mock.calls[0][0];
       expect(createArgs.data.passwordHash).not.toBe('plaintext-password');
-      expect(await bcrypt.compare('plaintext-password', createArgs.data.passwordHash)).toBe(true);
+      expect(
+        await bcrypt.compare(
+          'plaintext-password',
+          createArgs.data.passwordHash,
+        ),
+      ).toBe(true);
     });
   });
 
@@ -52,9 +60,9 @@ describe('AuthService', () => {
     it('throws UnauthorizedException if the user does not exist', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login('nobody@padhop.test', 'password')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login('nobody@padhop.test', 'password'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException if the password is wrong', async () => {
@@ -78,7 +86,10 @@ describe('AuthService', () => {
         passwordHash: realHash,
       });
 
-      const result = await service.login('user@padhop.test', 'correct-password');
+      const result = await service.login(
+        'user@padhop.test',
+        'correct-password',
+      );
 
       expect(result.accessToken).toBe('fake-jwt-token');
     });

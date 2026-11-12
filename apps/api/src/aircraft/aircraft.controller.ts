@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { AircraftService } from './aircraft.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,7 +14,7 @@ import { Roles } from '../auth/roles.decorator';
 
 @Controller('aircraft')
 export class AircraftController {
-  constructor(private aircraftService: AircraftService) { }
+  constructor(private aircraftService: AircraftService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('operator')
@@ -22,7 +30,12 @@ export class AircraftController {
     @Request() req,
     @Body() body: { model: string; capacity: number; registration: string },
   ) {
-    return this.aircraftService.create(req.user.userId, body.model, body.capacity, body.registration);
+    return this.aircraftService.create(
+      req.user.userId,
+      body.model,
+      body.capacity,
+      body.registration,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

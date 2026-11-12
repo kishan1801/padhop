@@ -3,10 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class OperatorsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async onboard(userId: string, companyName: string) {
-    const existing = await this.prisma.operator.findUnique({ where: { userId } });
+    const existing = await this.prisma.operator.findUnique({
+      where: { userId },
+    });
     if (existing) {
       throw new ConflictException('You are already registered as an operator');
     }

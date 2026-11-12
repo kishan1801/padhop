@@ -3,7 +3,7 @@ import { WeatherService } from './weather.service';
 
 @Controller('weather')
 export class WeatherController {
-  constructor(private weatherService: WeatherService) { }
+  constructor(private weatherService: WeatherService) {}
 
   @Get('risk')
   async risk(
@@ -11,6 +11,10 @@ export class WeatherController {
     @Query('lng') lng: string,
     @Query('time') time: string,
   ) {
-    return this.weatherService.getFlightRisk(parseFloat(lat), parseFloat(lng), time);
+    return this.weatherService.getFlightRisk(
+      parseFloat(lat),
+      parseFloat(lng),
+      time,
+    );
   }
 }

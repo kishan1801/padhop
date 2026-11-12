@@ -5,9 +5,12 @@ const BASE_PRICE_PER_SEAT = 8000; // ₹8,000 base, adjust as realistic for Indi
 
 @Injectable()
 export class PricingService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  async calculatePrice(helipadId: string, capacity: number): Promise<{
+  async calculatePrice(
+    helipadId: string,
+    capacity: number,
+  ): Promise<{
     pricePerSeat: number;
     totalPrice: number;
     demandMultiplier: number;

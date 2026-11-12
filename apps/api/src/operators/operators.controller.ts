@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { OperatorsService } from './operators.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,7 +14,7 @@ import { Roles } from '../auth/roles.decorator';
 
 @Controller('operators')
 export class OperatorsController {
-  constructor(private operatorsService: OperatorsService) { }
+  constructor(private operatorsService: OperatorsService) {}
 
   @UseGuards(JwtAuthGuard)
   @Post('onboard')
@@ -17,7 +25,7 @@ export class OperatorsController {
 
 @Controller('admin/operators')
 export class AdminOperatorsController {
-  constructor(private operatorsService: OperatorsService) { }
+  constructor(private operatorsService: OperatorsService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
