@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -76,5 +80,71 @@ export class HelipadsService {
         },
       },
     });
+  }
+
+  async searchByRoute(originId: string, destinationId: string) {
+    const originKey = originId?.trim();
+    const destinationKey = destinationId?.trim();
+    if (!originKey || !destinationKey) {
+      throw new BadRequestException(
+        'originId and destinationId are required',
+      );
+    }
+
+    const origin = await this.prisma.helipad.findUnique({
+      where: { id: originKey },
+      select: { id: true, name: true, city: true },
+    });
+    if (!origin) {
+      throw new NotFoundException('Origin helipad not found');
+    }
+
+    const destination = await this.prisma.helipad.findUnique({
+      where: { id: destinationKey },
+      select: { id: true, name: true, city: true },
+    });
+    if (!destination) {
+      throw new NotFoundException('Destination helipad not found');
+    }
+
+    if (origin.id === destination.id) {
+      throw new BadRequestException(
+        'Origin and destination must be different helipads',
+      );
+    }
+
+    const now = new Date();
+
+    const slots = await this.prisma.availabilitySlot.findMany({
+      where: {
+        helipadId: origin.id,
+        destinationHelipadId: destination.id,
+        status: 'available',
+        startTime: { gt: now },
+        endTime: { gt: now },
+      },
+      orderBy: [{ startTime: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        aircraft: {
+          select: {
+            model: true,
+            capacity: true,
+            registration: true,
+            operator: {
+              select: { companyName: true },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      origin,
+      destination,
+      slots,
+    };
   }
 }

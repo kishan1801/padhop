@@ -3,10 +3,9 @@
 import { FormEvent, useState, useRef, useEffect } from "react";
 import { Send, Plane } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { apiFetch } from "@/lib/api-client";
 
 type Message = { role: "user" | "assistant"; content: string };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export default function AssistantPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -33,12 +32,10 @@ export default function AssistantPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/chat`, {
+      const data = await apiFetch<{ reply: string }>("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage.content }),
       });
-      const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch {
       setMessages((prev) => [

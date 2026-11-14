@@ -13,9 +13,9 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-context";
-import { ApiRequestError, authenticate } from "@/lib/api-client";
 import {
   fetchMyBookings,
+  hasDistinctDestination,
   partitionBookings,
   type PassengerBooking,
   type PassengerBookingStatus,
@@ -33,12 +33,31 @@ const priceFormatter = new Intl.NumberFormat("en-IN", {
 });
 const statusDetails: Record<
   PassengerBookingStatus,
-  { label: string; icon: typeof Clock3 }
+  { label: string; description: string; icon: typeof Clock3 }
 > = {
-  held: { label: "On hold", icon: Clock3 },
-  confirmed: { label: "Confirmed", icon: CheckCircle2 },
-  cancelled: { label: "Cancelled", icon: XCircle },
-  completed: { label: "Completed", icon: CheckCircle2 },
+  held: {
+    label: "On hold",
+    description:
+      "This is a temporary booking hold. It expires automatically if not confirmed.",
+    icon: Clock3,
+  },
+  confirmed: {
+    label: "Confirmed",
+    description:
+      "Your booking is confirmed in PadHop. This does not mean operator acceptance, payment, or flight approval.",
+    icon: CheckCircle2,
+  },
+  cancelled: {
+    label: "Hold expired",
+    description:
+      "This temporary hold expired automatically and the slot was released.",
+    icon: XCircle,
+  },
+  completed: {
+    label: "Completed",
+    description: "Flight completion tracking is not currently available.",
+    icon: CheckCircle2,
+  },
 };
 
 function formatDateTime(value: string) {
@@ -49,45 +68,70 @@ function formatDateTime(value: string) {
 }
 
 function BookingStatus({ status }: { status: PassengerBookingStatus }) {
-  const { label, icon: Icon } = statusDetails[status];
+  const { label, description, icon: Icon } = statusDetails[status];
   return (
-    <span className={`journeyStatus journeyStatus-${status}`} aria-label={`Booking status: ${label}`}>
-      <Icon size={15} aria-hidden="true" />
-      {label}
-    </span>
+    <div className="journeyStatusGroup" aria-label={`Booking status: ${label}`}>
+      <span className={`journeyStatus journeyStatus-${status}`}>
+        <Icon size={15} aria-hidden="true" />
+        {label}
+      </span>
+      <span className="journeyStatusDescription">{description}</span>
+    </div>
   );
 }
 
 function JourneyCard({ booking }: { booking: PassengerBooking }) {
   return (
-    <article className="journeyCard">
+    <Link href={`/my-journeys/${booking.bookingId}`} className="journeyCardLink">
+      <article className="journeyCard">
       <header className="journeyCardHeader">
         <div className="journeyReference">
           <span>Booking reference</span>
-          <code>{booking.bookingId}</code>
+          <code>{booking.reference}</code>
         </div>
         <BookingStatus status={booking.status} />
       </header>
 
       <h3 className="journeyAircraft">
         <Plane size={18} aria-hidden="true" />
-        {booking.slot.aircraft.model}
-        <span>{booking.slot.aircraft.capacity} seats</span>
+        <span className="journeyAircraftModel">{booking.slot.aircraft.model}</span>
+        <span className="journeyAircraftCapacity">{booking.slot.aircraft.capacity} seats</span>
       </h3>
+      {booking.slot.aircraft.registration && (
+        <p className="journeyAircraftRegistration">
+          Registration: {booking.slot.aircraft.registration}
+        </p>
+      )}
 
       <div className="journeyRoute" aria-label="Journey route">
         <div className="journeyLocation">
-          <span>From</span>
-          <strong>{booking.slot.helipad.name}</strong>
-          <small>{booking.slot.helipad.city}</small>
+          <span className="journeyLocationLabel">From</span>
+          <strong className="journeyLocationValue">{booking.slot.helipad.name}</strong>
+          <small className="journeyLocationCity">{booking.slot.helipad.city}</small>
         </div>
         <ArrowRight className="journeyRouteArrow" size={20} aria-hidden="true" />
         <div className="journeyLocation journeyDestination">
-          <span>To</span>
-          <strong>{booking.destinationHelipad.name}</strong>
-          <small>{booking.destinationHelipad.city}</small>
+          <span className="journeyLocationLabel">To</span>
+          {hasDistinctDestination(booking) ? (
+            <>
+              <strong className="journeyLocationValue">{booking.destinationHelipad?.name}</strong>
+              <small className="journeyLocationCity">{booking.destinationHelipad?.city}</small>
+            </>
+          ) : (
+            <>
+              <strong className="journeyLocationValue">No separate destination recorded</strong>
+              <small className="journeyLocationCity">The hold did not specify a distinct destination helipad.</small>
+            </>
+          )}
         </div>
       </div>
+
+      {booking.slot.operator?.companyName && (
+        <div className="journeyOperator">
+          <span className="journeyOperatorLabel">Operator</span>
+          <strong className="journeyOperatorValue">{booking.slot.operator.companyName}</strong>
+        </div>
+      )}
 
       <div className="journeyDetails">
         <div className="journeyDetail">
@@ -111,6 +155,7 @@ function JourneyCard({ booking }: { booking: PassengerBooking }) {
         Booked {formatDateTime(booking.createdAt)}
       </p>
     </article>
+  </Link>
   );
 }
 
@@ -126,74 +171,43 @@ function JourneySkeleton() {
 }
 
 export default function MyJourneysPage() {
-  const { token, setToken } = useAuth();
-  const [loadState, setLoadState] = useState<
-    | {
-        reloadKey: number;
-        status: "success";
-        bookings: PassengerBooking[];
-      }
-    | {
-        reloadKey: number;
-        status: "error";
-        message: string;
-      }
-    | null
-  >(null);
+  const { user, loading: authLoading, login } = useAuth();
+  const [bookings, setBookings] = useState<PassengerBooking[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authLoading, setAuthLoading] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user || authLoading) return;
 
     const controller = new AbortController();
-    void fetchMyBookings(token, controller.signal)
+    void fetchMyBookings(controller.signal)
       .then((nextBookings) => {
         if (controller.signal.aborted) return;
-        setLoadState({
-          reloadKey,
-          status: "success",
-          bookings: nextBookings,
-        });
+        setBookings(nextBookings);
+        setError(null);
       })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted) return;
-        if (
-          requestError instanceof ApiRequestError &&
-          requestError.status === 401
-        ) {
-          setLoadState(null);
-          setToken(null);
-          setAuthMessage("Your session has expired. Sign in again to view your journeys.");
-          return;
-        }
-        setLoadState({
-          reloadKey,
-          status: "error",
-          message:
-            requestError instanceof Error
-              ? requestError.message
-              : "Could not load your journeys.",
-        });
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Could not load your journeys.",
+        );
       });
 
     return () => controller.abort();
-  }, [token, reloadKey, setToken]);
+  }, [user, authLoading, reloadKey]);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setAuthLoading(true);
+    setAuthSubmitting(true);
     setAuthError(null);
     try {
-      const accessToken = await authenticate({
-        mode: "login",
-        email: String(form.get("email")),
-        password: String(form.get("password")),
-      });
-      setToken(accessToken);
+      await login(String(form.get("email")), String(form.get("password")));
       setAuthMessage(null);
     } catch (requestError) {
       setAuthError(
@@ -202,20 +216,12 @@ export default function MyJourneysPage() {
           : "Could not sign in.",
       );
     } finally {
-      setAuthLoading(false);
+      setAuthSubmitting(false);
     }
   }
 
-  const needsAuthentication = !token;
-  const currentLoad =
-    token && loadState?.reloadKey === reloadKey
-      ? loadState
-      : null;
-  const showLoading = Boolean(token) && currentLoad === null;
-  const error =
-    currentLoad?.status === "error" ? currentLoad.message : null;
-  const bookings =
-    currentLoad?.status === "success" ? currentLoad.bookings : null;
+  const needsAuthentication = !user && !authLoading;
+  const showLoading = Boolean(user) && !authLoading && bookings === null;
   const journeys = bookings ? partitionBookings(bookings) : null;
 
   return (
@@ -251,8 +257,8 @@ export default function MyJourneysPage() {
                 required
               />
               {authError && <p className="journeysError" role="alert">{authError}</p>}
-              <button className="searchButton" type="submit" disabled={authLoading}>
-                {authLoading ? "Signing in…" : "Sign in"}
+              <button className="searchButton" type="submit" disabled={authSubmitting}>
+                {authSubmitting ? "Signing in…" : "Sign in"}
               </button>
             </form>
             <p className="journeysAuthHint">
@@ -306,6 +312,25 @@ export default function MyJourneysPage() {
               )}
             </section>
 
+            <section className="journeySection" aria-labelledby="in-progress-title">
+              <div className="journeySectionHeader">
+                <div>
+                  <p className="eyebrow">In progress</p>
+                  <h2 id="in-progress-title">In progress journeys</h2>
+                </div>
+                <span className="journeyCount">{journeys.inProgress.length}</span>
+              </div>
+              {journeys.inProgress.length > 0 ? (
+                <div className="journeyGrid">
+                  {journeys.inProgress.map((booking) => (
+                    <JourneyCard key={booking.bookingId} booking={booking} />
+                  ))}
+                </div>
+              ) : (
+                <p className="journeySectionEmpty">No journeys in progress right now.</p>
+              )}
+            </section>
+
             <section className="journeySection" aria-labelledby="past-title">
               <div className="journeySectionHeader">
                 <div>
@@ -321,11 +346,11 @@ export default function MyJourneysPage() {
                   ))}
                 </div>
               ) : (
-                <p className="journeySectionEmpty">Past and cancelled journeys will appear here.</p>
+                <p className="journeySectionEmpty">Past and expired journeys will appear here.</p>
               )}
             </section>
             <p className="journeysDisclaimer">
-              Booking status does not indicate payment or operator acceptance.
+              Booking status does not indicate payment, operator acceptance, flight approval, or actual flight completion.
             </p>
           </div>
         ) : null}

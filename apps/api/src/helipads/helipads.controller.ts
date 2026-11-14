@@ -20,6 +20,15 @@ function parseQueryNumber(value: string | undefined, name: string): number {
   return parsed;
 }
 
+function parseRequiredId(value: string | undefined, name: string): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    throw new BadRequestException(`${name} is required`);
+  }
+
+  return trimmed;
+}
+
 @Controller('helipads')
 export class HelipadsController {
   constructor(private helipadsService: HelipadsService) {}
@@ -41,6 +50,17 @@ export class HelipadsController {
       radiusKm === undefined
         ? undefined
         : parseQueryNumber(radiusKm, 'radiusKm'),
+    );
+  }
+
+  @Get('search')
+  async search(
+    @Query('originId') originId?: string,
+    @Query('destinationId') destinationId?: string,
+  ) {
+    return this.helipadsService.searchByRoute(
+      parseRequiredId(originId, 'originId'),
+      parseRequiredId(destinationId, 'destinationId'),
     );
   }
 

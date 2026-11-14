@@ -939,6 +939,12 @@ html {
   color: var(--text-secondary);
 }
 
+.slotInfo .slotRoute {
+  flex-wrap: wrap;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
 .spin {
   animation: spin 0.8s linear infinite;
 }
@@ -1571,6 +1577,20 @@ html {
   color: var(--text-secondary);
 }
 
+.journeyStatusGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+
+.journeyStatusDescription {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+
 .journeyAircraft {
   display: flex;
   align-items: center;
@@ -1586,12 +1606,50 @@ html {
   color: var(--brass);
 }
 
-.journeyAircraft > span {
+.journeyAircraftModel {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.journeyAircraftCapacity {
   margin-left: auto;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-family: var(--font-body);
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+.journeyAircraftRegistration {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-family: var(--font-body);
+}
+
+.journeyOperator {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.journeyOperatorLabel {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.journeyOperatorValue {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .journeyRoute {
@@ -1602,6 +1660,26 @@ html {
   padding: 1rem 0;
   border-top: 1px solid var(--panel-border);
   border-bottom: 1px solid var(--panel-border);
+}
+
+.journeyLocationLabel {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.journeyLocationValue {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.journeyLocationCity {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
 }
 
 .journeyLocation {

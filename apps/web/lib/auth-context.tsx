@@ -4,23 +4,158 @@ import {
   createContext,
   useContext,
   useState,
-  type Dispatch,
+  useEffect,
   type ReactNode,
-  type SetStateAction,
 } from "react";
 
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
 type AuthContextValue = {
-  token: string | null;
-  setToken: Dispatch<SetStateAction<string | null>>;
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(url, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    let message = "Request failed";
+    if (data && typeof data === "object" && "message" in data) {
+      const responseMessage = data.message;
+      if (typeof responseMessage === "string" && responseMessage.trim()) {
+        message = responseMessage;
+      } else if (Array.isArray(responseMessage)) {
+        const messages = responseMessage.filter(
+          (item): item is string => typeof item === "string",
+        );
+        if (messages.length > 0) message = messages.join(", ");
+      }
+    }
+    const error = new Error(message) as Error & { status: number };
+    error.status = response.status;
+    throw error;
+  }
+  return data as T;
+}
+
+async function getCsrfToken(): Promise<string | null> {
+  try {
+    const data = await fetchJson<{ ok: boolean }>("/api/auth/csrf", {
+      method: "GET",
+    });
+    if (data.ok) {
+      const cookies = document.cookie.split("; ");
+      for (const cookie of cookies) {
+        if (cookie.startsWith("csrf_token=")) {
+          const value = cookie.substring("csrf_token=".length);
+          const parts = value.split(".");
+          if (parts.length === 2 && parts[0]) {
+            return parts[0];
+          }
+        }
+      }
+    }
+  } catch {
+    // CSRF token not available, continue without it
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    try {
+      const data = await fetchJson<{ user: User }>("/api/auth/me");
+      setUser(data.user);
+    } catch (error) {
+      const err = error as Error & { status: number };
+      if (err.status === 401) {
+        setUser(null);
+      } else {
+        throw error;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const initAuth = async () => {
+      await getCsrfToken();
+      if (mounted) {
+        await refresh();
+      }
+    };
+    initAuth();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const csrfToken = await getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+    await fetchJson<{ user: User }>("/api/auth/login", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ email, password }),
+    });
+    await refresh();
+  };
+
+  const signup = async (name: string, email: string, password: string) => {
+    const csrfToken = await getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+    await fetchJson<{ user: User }>("/api/auth/signup", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name, email, password }),
+    });
+    await refresh();
+  };
+
+  const logout = async () => {
+    const csrfToken = await getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+    await fetchJson<{ ok: boolean }>("/api/auth/logout", {
+      method: "POST",
+      headers,
+    });
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ token, setToken }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

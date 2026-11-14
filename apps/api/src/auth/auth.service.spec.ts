@@ -4,17 +4,40 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { Response } from 'express';
+
+process.env.CSRF_SECRET =
+  'dGVzdF9jc3JmX3NlY3JldF9mb3JfZGV2ZWxvcG1lbnRfb25seQ==';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: { user: { findUnique: jest.Mock; create: jest.Mock } };
+  let prisma: {
+    user: { findUnique: jest.Mock; create: jest.Mock };
+    session: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+  };
   let jwtService: { sign: jest.Mock };
+  let mockResponse: Partial<Response>;
 
   beforeEach(async () => {
     prisma = {
       user: { findUnique: jest.fn(), create: jest.fn() },
+      session: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
     };
     jwtService = { sign: jest.fn().mockReturnValue('fake-jwt-token') };
+    mockResponse = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -32,7 +55,12 @@ describe('AuthService', () => {
       prisma.user.findUnique.mockResolvedValue({ id: 'existing-user' });
 
       await expect(
-        service.signup('Name', 'taken@padhop.test', 'password123'),
+        service.signup(
+          'Name',
+          'taken@padhop.test',
+          'password123',
+          mockResponse as Response,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -41,9 +69,17 @@ describe('AuthService', () => {
       prisma.user.create.mockResolvedValue({
         id: 'new-user',
         email: 'new@padhop.test',
+        name: 'Name',
+        role: 'passenger',
       });
+      prisma.session.create.mockResolvedValue({});
 
-      await service.signup('Name', 'new@padhop.test', 'plaintext-password');
+      await service.signup(
+        'Name',
+        'new@padhop.test',
+        'plaintext-password',
+        mockResponse as Response,
+      );
 
       const createArgs = prisma.user.create.mock.calls[0][0];
       expect(createArgs.data.passwordHash).not.toBe('plaintext-password');
@@ -53,6 +89,8 @@ describe('AuthService', () => {
           createArgs.data.passwordHash,
         ),
       ).toBe(true);
+      expect(prisma.session.create).toHaveBeenCalled();
+      expect(mockResponse.cookie).toHaveBeenCalled();
     });
   });
 
@@ -61,7 +99,11 @@ describe('AuthService', () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.login('nobody@padhop.test', 'password'),
+        service.login(
+          'nobody@padhop.test',
+          'password',
+          mockResponse as Response,
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -74,24 +116,39 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.login('user@padhop.test', 'wrong-password'),
+        service.login(
+          'user@padhop.test',
+          'wrong-password',
+          mockResponse as Response,
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('returns a token when credentials are correct', async () => {
+    it('returns a user when credentials are correct', async () => {
       const realHash = await bcrypt.hash('correct-password', 10);
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         email: 'user@padhop.test',
         passwordHash: realHash,
+        name: 'Test User',
+        role: 'passenger',
       });
+      prisma.session.create.mockResolvedValue({});
 
       const result = await service.login(
         'user@padhop.test',
         'correct-password',
+        mockResponse as Response,
       );
 
-      expect(result.accessToken).toBe('fake-jwt-token');
+      expect(result.user).toEqual({
+        id: 'user-1',
+        email: 'user@padhop.test',
+        name: 'Test User',
+        role: 'passenger',
+      });
+      expect(prisma.session.create).toHaveBeenCalled();
+      expect(mockResponse.cookie).toHaveBeenCalled();
     });
   });
 });

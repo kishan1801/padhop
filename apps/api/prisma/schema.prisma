@@ -93,25 +93,29 @@ model Helipad {
   // we write/query it via raw SQL in the matching engine.
   location Unsupported("geography(Point, 4326)")?
 
-  slotsOrigin       AvailabilitySlot[] @relation("originHelipad")
-  bookingsDestination Booking[]        @relation("destinationHelipad")
+  slotsOrigin          AvailabilitySlot[] @relation("originHelipad")
+  slotsDestination     AvailabilitySlot[] @relation("slotDestination")
+  bookingsDestination Booking[]          @relation("destinationHelipad")
 
   @@map("helipads")
 }
 
 model AvailabilitySlot {
-  id         String     @id @default(uuid())
-  aircraftId String     @map("aircraft_id")
-  helipadId  String     @map("helipad_id")
-  startTime  DateTime   @map("start_time")
-  endTime    DateTime   @map("end_time")
-  status     SlotStatus @default(available)
-  createdAt  DateTime   @default(now()) @map("created_at")
+  id                    String     @id @default(uuid())
+  aircraftId            String     @map("aircraft_id")
+  helipadId             String     @map("helipad_id")
+  destinationHelipadId  String?    @map("destination_helipad_id")
+  startTime             DateTime   @map("start_time")
+  endTime               DateTime   @map("end_time")
+  status                SlotStatus @default(available)
+  createdAt             DateTime   @default(now()) @map("created_at")
 
-  aircraft Aircraft @relation(fields: [aircraftId], references: [id])
-  helipad  Helipad  @relation("originHelipad", fields: [helipadId], references: [id])
-  bookings Booking[]
+  aircraft           Aircraft @relation(fields: [aircraftId], references: [id])
+  helipad            Helipad  @relation("originHelipad", fields: [helipadId], references: [id])
+  destinationHelipad Helipad? @relation("slotDestination", fields: [destinationHelipadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  bookings           Booking[]
 
+  @@index([helipadId, destinationHelipadId])
   @@map("availability_slots")
 }
 
@@ -124,6 +128,7 @@ model Booking {
   status               BookingStatus @default(held)
   price                Decimal       @db.Decimal(10, 2)
   createdAt            DateTime      @default(now()) @map("created_at")
+  reference            String        @unique @map("reference") @db.VarChar(20)
 
   user               User             @relation(fields: [userId], references: [id])
   slot               AvailabilitySlot @relation(fields: [slotId], references: [id])
@@ -144,4 +149,17 @@ model Payment {
   booking Booking @relation(fields: [bookingId], references: [id])
 
   @@map("payments")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+
+  @@index([userId])
+  @@map("sessions")
 }

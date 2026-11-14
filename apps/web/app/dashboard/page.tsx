@@ -1,11 +1,20 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Plane, Clock, Users, Plus, CalendarClock, CircleCheckBig, LayoutDashboard } from "lucide-react";
+import { Plane, Clock, Users, Plus, CalendarClock, CircleCheckBig, LayoutDashboard, ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api-client";
 
-type Slot = { id: string; startTime: string; endTime: string; status: string };
+type Slot = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  helipadId: string;
+  destinationHelipadId: string | null;
+};
 type Aircraft = {
   id: string;
   model: string;
@@ -15,18 +24,17 @@ type Aircraft = {
 };
 type Helipad = { id: string; name: string; city: string };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-
 export default function DashboardPage() {
-  const [token, setToken] = useState<string | null>(null);
+  const { user, loading: authLoading, login, signup, logout } = useAuth();
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
-  const [authLoading, setAuthLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [fleet, setFleet] = useState<Aircraft[] | null>(null);
   const [helipads, setHelipads] = useState<Helipad[]>([]);
   const [loadingFleet, setLoadingFleet] = useState(false);
   const [showAddAircraft, setShowAddAircraft] = useState(false);
   const [addingSlotFor, setAddingSlotFor] = useState<string | null>(null);
+  const [slotOriginId, setSlotOriginId] = useState("");
+  const [slotDestinationId, setSlotDestinationId] = useState("");
   const aircraftCount = fleet?.length ?? 0;
   const slotCount = fleet?.reduce((total, aircraft) => total + aircraft.slots.length, 0) ?? 0;
   const availableCount = fleet?.reduce(
@@ -34,31 +42,18 @@ export default function DashboardPage() {
     0,
   ) ?? 0;
 
-  async function json(response: Response) {
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(
-        Array.isArray(data.message) ? data.message.join(", ") : data.message || "Request failed",
-      );
-    }
-    return data;
-  }
-
-  async function loadFleet(accessToken: string) {
+  async function loadFleet() {
     setLoadingFleet(true);
     setMessage("");
     try {
-      const response = await fetch(`${API_URL}/aircraft/mine`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      // A newly created passenger has not registered as an operator yet.
-      // Treat that expected state as an empty fleet so the onboarding form is shown.
-      if (response.status === 403) {
+      const response = await apiFetch<Aircraft[]>("/api/aircraft/mine");
+      setFleet(response);
+    } catch (error) {
+      const err = error as Error & { status: number };
+      if (err.status === 403) {
         setFleet([]);
         return;
       }
-      setFleet(await json(response));
-    } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not load your fleet.");
     } finally {
       setLoadingFleet(false);
@@ -66,56 +61,48 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetch(`${API_URL}/helipads`)
-      .then((res) => res.json())
+    apiFetch<Helipad[]>("/api/helipads")
       .then(setHelipads)
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadFleet();
+    }
+  }, [user, authLoading]);
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setAuthLoading(true);
     setMessage("");
     try {
-      const body =
-        authMode === "signup"
-          ? {
-              name: String(form.get("name")),
-              email: String(form.get("email")),
-              password: String(form.get("password")),
-            }
-          : { email: String(form.get("email")), password: String(form.get("password")) };
-      const data = await json(
-        await fetch(`${API_URL}/auth/${authMode}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      );
-      setToken(data.accessToken);
-      await loadFleet(data.accessToken);
+      if (authMode === "signup") {
+        await signup(
+          String(form.get("name")),
+          String(form.get("email")),
+          String(form.get("password")),
+        );
+      } else {
+        await login(String(form.get("email")), String(form.get("password")));
+      }
+      setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
-    } finally {
-      setAuthLoading(false);
     }
   }
 
   async function submitOnboard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token) return;
+    if (!user) return;
     const form = new FormData(event.currentTarget);
     try {
-      await json(
-        await fetch(`${API_URL}/operators/onboard`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName: String(form.get("companyName")) }),
-        }),
-      );
+      await apiFetch("/api/operators/onboard", {
+        method: "POST",
+        body: JSON.stringify({ companyName: String(form.get("companyName")) }),
+      });
       setMessage("Operator account created. Awaiting admin verification before you can add aircraft.");
-      await loadFleet(token);
+      await loadFleet();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not register as an operator.");
     }
@@ -123,22 +110,19 @@ export default function DashboardPage() {
 
   async function submitAircraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token) return;
+    if (!user) return;
     const form = new FormData(event.currentTarget);
     try {
-      await json(
-        await fetch(`${API_URL}/aircraft`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: String(form.get("model")),
-            capacity: Number(form.get("capacity")),
-            registration: String(form.get("registration")),
-          }),
+      await apiFetch("/api/aircraft", {
+        method: "POST",
+        body: JSON.stringify({
+          model: String(form.get("model")),
+          capacity: Number(form.get("capacity")),
+          registration: String(form.get("registration")),
         }),
-      );
+      });
       setShowAddAircraft(false);
-      await loadFleet(token);
+      await loadFleet();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not add aircraft.");
     }
@@ -146,74 +130,232 @@ export default function DashboardPage() {
 
   async function submitSlot(event: FormEvent<HTMLFormElement>, aircraftId: string) {
     event.preventDefault();
-    if (!token) return;
+    if (!user) return;
+    if (!slotOriginId || !slotDestinationId) {
+      setMessage("Select both an origin and a destination helipad.");
+      return;
+    }
+    if (slotOriginId === slotDestinationId) {
+      setMessage("Origin and destination must be different helipads.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     try {
       const startDate = new Date(String(form.get("startTime")));
+      if (Number.isNaN(startDate.getTime())) {
+        setMessage("Select a valid departure time.");
+        return;
+      }
       const endDate = new Date(startDate.getTime() + Number(form.get("durationHours")) * 60 * 60 * 1000);
-      await json(
-        await fetch(`${API_URL}/aircraft/${aircraftId}/slots`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            helipadId: String(form.get("helipadId")),
-            startTime: startDate.toISOString(),
-            endTime: endDate.toISOString(),
-          }),
+      await apiFetch(`/api/aircraft/${aircraftId}/slots`, {
+        method: "POST",
+        body: JSON.stringify({
+          helipadId: slotOriginId,
+          destinationHelipadId: slotDestinationId,
+          startTime: startDate.toISOString(),
+          endTime: endDate.toISOString(),
         }),
-      );
+      });
+      setMessage("");
       setAddingSlotFor(null);
-      await loadFleet(token);
+      setSlotOriginId("");
+      setSlotDestinationId("");
+      await loadFleet();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not add slot.");
     }
   }
 
-  if (!token) {
+  async function handleLogout() {
+    await logout();
+    setFleet(null);
+    setMessage("");
+  }
+
+  if (authLoading) {
     return (
-      <AppShell><main className="dashPage">
-        <div className="dashAuthCard">
-          <p className="eyebrow">Operator dashboard</p>
-          <h1>{authMode === "login" ? "Sign in to manage your fleet" : "Create an operator account"}</h1>
-          <form onSubmit={submitAuth}>
-            {authMode === "signup" && <input name="name" required placeholder="Your name" />}
-            <input name="email" type="email" required placeholder="Email address" />
-            <input name="password" type="password" minLength={8} required placeholder="Password" />
-            <button className="searchButton" disabled={authLoading}>
-              {authLoading ? "Please wait…" : authMode === "login" ? "Sign in" : "Create account"}
-            </button>
-            <button type="button" className="textButton" onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}>
-              {authMode === "login" ? "New operator? Create an account" : "Already have an account? Sign in"}
-            </button>
-          </form>
-          {message && <p className="notice error">{message}</p>}
-        </div>
-      </main></AppShell>
+      <AppShell>
+        <main className="dashPage">
+          <p className="hint">Loading…</p>
+        </main>
+      </AppShell>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AppShell>
+        <main className="dashPage">
+          <div className="dashAuthCard">
+            <p className="eyebrow">Operator dashboard</p>
+            <h1>{authMode === "login" ? "Sign in to manage your fleet" : "Create an operator account"}</h1>
+            <form onSubmit={submitAuth}>
+              {authMode === "signup" && <input name="name" required placeholder="Your name" />}
+              <input name="email" type="email" required placeholder="Email address" />
+              <input name="password" type="password" minLength={8} required placeholder="Password" />
+              <button className="searchButton" type="submit">
+                {authMode === "login" ? "Sign in" : "Create account"}
+              </button>
+              <button type="button" className="textButton" onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}>
+                {authMode === "login" ? "New operator? Create an account" : "Already have an account? Sign in"}
+              </button>
+            </form>
+            {message && <p className="notice error">{message}</p>}
+          </div>
+        </main>
+      </AppShell>
     );
   }
 
   return (
-    <AppShell><main className="dashPage">
-      <div className="dashHeader"><p className="eyebrow">Operator control center</p><h1>Your fleet, at a glance</h1><p>Manage aircraft availability and keep your schedule ready for booking.</p></div>
-      <section className="statGrid" aria-label="Fleet summary">
-        <div className="statCard"><Plane size={18} /><span>{aircraftCount}</span><small>Aircraft</small></div>
-        <div className="statCard"><CalendarClock size={18} /><span>{slotCount}</span><small>Total slots</small></div>
-        <div className="statCard"><CircleCheckBig size={18} /><span>{availableCount}</span><small>Available now</small></div>
-        <div className="statCard"><LayoutDashboard size={18} /><span>{helipads.length}</span><small>Helipads</small></div>
-      </section>
-      {message && <p className="notice">{message}</p>}
-      {fleet && fleet.length === 0 && <div className="dashCard emptyState"><span className="emptyIcon"><Plane size={22} /></span><div><p className="sectionLabel">Start operating</p><h2>Register your operator account</h2><p>Once an administrator verifies your company, you can add aircraft and publish availability.</p></div><form onSubmit={submitOnboard} className="inlineForm"><label className="srOnly" htmlFor="companyName">Company name</label><input id="companyName" name="companyName" required placeholder="Company name" /><button className="searchButton">Register company</button></form></div>}
-      {loadingFleet && <p className="hint">Loading your fleet…</p>}
-      <div className="fleetList">
-        {fleet?.map((aircraft) => (
-          <div key={aircraft.id} className="dashCard aircraftCard">
-            <div className="dashCardTop"><div className="cardIcon"><Plane size={20} /></div><div><h2>{aircraft.model}</h2><p className="cardCity">{aircraft.registration} · <Users size={13} /> {aircraft.capacity} seats</p></div><Badge variant="secondary">{aircraft.slots.length} slots</Badge></div>
-            <div className="slotList">{aircraft.slots.map((slot) => <div key={slot.id} className="slot"><div className="slotInfo"><span><Clock size={13} /> {new Date(slot.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span></div><Badge variant={slot.status === "available" ? "default" : "secondary"}>{slot.status}</Badge></div>)}</div>
-            {addingSlotFor === aircraft.id ? <form onSubmit={(event) => submitSlot(event, aircraft.id)} className="inlineForm"><select name="helipadId" required><option value="">Select helipad</option>{helipads.map((helipad) => <option key={helipad.id} value={helipad.id}>{helipad.name}</option>)}</select><input name="startTime" type="datetime-local" required /><input name="durationHours" type="number" min={1} max={12} defaultValue={2} required /><button className="searchButton">Add slot</button></form> : <button className="searchButtonSecondary fullWidth" onClick={() => setAddingSlotFor(aircraft.id)}><Plus size={14} /> Add availability</button>}
+    <AppShell>
+      <main className="dashPage">
+        <div className="dashHeader">
+          <p className="eyebrow">Operator control center</p>
+          <h1>Your fleet, at a glance</h1>
+          <p>Manage aircraft availability and keep your schedule ready for booking.</p>
+        </div>
+        <section className="statGrid" aria-label="Fleet summary">
+          <div className="statCard"><Plane size={18} /><span>{aircraftCount}</span><small>Aircraft</small></div>
+          <div className="statCard"><CalendarClock size={18} /><span>{slotCount}</span><small>Total slots</small></div>
+          <div className="statCard"><CircleCheckBig size={18} /><span>{availableCount}</span><small>Available now</small></div>
+          <div className="statCard"><LayoutDashboard size={18} /><span>{helipads.length}</span><small>Helipads</small></div>
+        </section>
+        {message && <p className="notice">{message}</p>}
+        {fleet && fleet.length === 0 && (
+          <div className="dashCard emptyState">
+            <span className="emptyIcon"><Plane size={22} /></span>
+            <div>
+              <p className="sectionLabel">Start operating</p>
+              <h2>Register your operator account</h2>
+              <p>Once an administrator verifies your company, you can add aircraft and publish availability.</p>
+            </div>
+            <form onSubmit={submitOnboard} className="inlineForm">
+              <label className="srOnly" htmlFor="companyName">Company name</label>
+              <input id="companyName" name="companyName" required placeholder="Company name" />
+              <button className="searchButton">Register company</button>
+            </form>
           </div>
-        ))}
-      </div>
-      {!showAddAircraft ? <button className="searchButton addAircraftButton" onClick={() => setShowAddAircraft(true)}><Plus size={16} /> Add aircraft</button> : <form onSubmit={submitAircraft} className="dashCard inlineForm"><label className="srOnly" htmlFor="model">Aircraft model</label><input id="model" name="model" required placeholder="Model (e.g. Bell 407)" /><label className="srOnly" htmlFor="registration">Registration</label><input id="registration" name="registration" required placeholder="Registration (e.g. VT-ABC1)" /><label className="srOnly" htmlFor="capacity">Seat capacity</label><input id="capacity" name="capacity" type="number" min={1} required placeholder="Seats" /><button className="searchButton">Save aircraft</button></form>}
-    </main></AppShell>
+        )}
+        {loadingFleet && <p className="hint">Loading your fleet…</p>}
+        <div className="fleetList">
+          {fleet?.map((aircraft) => (
+            <div key={aircraft.id} className="dashCard aircraftCard">
+              <div className="dashCardTop">
+                <div className="cardIcon"><Plane size={20} /></div>
+                <div>
+                  <h2>{aircraft.model}</h2>
+                  <p className="cardCity">{aircraft.registration} · <Users size={13} /> {aircraft.capacity} seats</p>
+                </div>
+                <Badge variant="secondary">{aircraft.slots.length} slots</Badge>
+              </div>
+              <div className="slotList">
+                {aircraft.slots.map((slot) => {
+                  const originName =
+                    helipads.find((helipad) => helipad.id === slot.helipadId)?.name ??
+                    "Unknown origin";
+                  const destinationName = slot.destinationHelipadId
+                    ? helipads.find(
+                        (helipad) => helipad.id === slot.destinationHelipadId,
+                      )?.name ?? "Unknown destination"
+                    : null;
+                  return (
+                    <div key={slot.id} className="slot">
+                      <div className="slotInfo">
+                        <span className="slotRoute">
+                          {originName}
+                          <ArrowRight size={12} aria-hidden="true" />
+                          {destinationName ?? "No destination declared"}
+                        </span>
+                        <span><Clock size={13} /> {new Date(slot.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+                      </div>
+                      <Badge variant={slot.status === "available" ? "default" : "secondary"}>{slot.status}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              {addingSlotFor === aircraft.id ? (
+                <form onSubmit={(event) => submitSlot(event, aircraft.id)} className="inlineForm">
+                  <label className="srOnly" htmlFor={`origin-${aircraft.id}`}>Origin helipad</label>
+                  <select
+                    id={`origin-${aircraft.id}`}
+                    name="helipadId"
+                    required
+                    value={slotOriginId}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSlotOriginId(value);
+                      if (slotDestinationId === value) {
+                        setSlotDestinationId("");
+                      }
+                    }}
+                  >
+                    <option value="">Select origin</option>
+                    {helipads.map((helipad) => (
+                      <option key={helipad.id} value={helipad.id}>{helipad.name}</option>
+                    ))}
+                  </select>
+                  <label className="srOnly" htmlFor={`destination-${aircraft.id}`}>Destination helipad</label>
+                  <select
+                    id={`destination-${aircraft.id}`}
+                    name="destinationHelipadId"
+                    required
+                    value={slotDestinationId}
+                    disabled={!slotOriginId}
+                    onChange={(event) => setSlotDestinationId(event.target.value)}
+                  >
+                    <option value="">Select destination</option>
+                    {helipads
+                      .filter((helipad) => helipad.id !== slotOriginId)
+                      .map((helipad) => (
+                        <option key={helipad.id} value={helipad.id}>{helipad.name}</option>
+                      ))}
+                  </select>
+                  <input name="startTime" type="datetime-local" required />
+                  <input name="durationHours" type="number" min={1} max={12} defaultValue={2} required />
+                  <button
+                    className="searchButton"
+                    disabled={!slotOriginId || !slotDestinationId || slotOriginId === slotDestinationId}
+                  >
+                    Add slot
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="searchButtonSecondary fullWidth"
+                  onClick={() => {
+                    setSlotOriginId("");
+                    setSlotDestinationId("");
+                    setAddingSlotFor(aircraft.id);
+                  }}
+                >
+                  <Plus size={14} /> Add availability
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {!showAddAircraft ? (
+          <button className="searchButton addAircraftButton" onClick={() => setShowAddAircraft(true)}>
+            <Plus size={16} /> Add aircraft
+          </button>
+        ) : (
+          <form onSubmit={submitAircraft} className="dashCard inlineForm">
+            <label className="srOnly" htmlFor="model">Aircraft model</label>
+            <input id="model" name="model" required placeholder="Model (e.g. Bell 407)" />
+            <label className="srOnly" htmlFor="registration">Registration</label>
+            <input id="registration" name="registration" required placeholder="Registration (e.g. VT-ABC1)" />
+            <label className="srOnly" htmlFor="capacity">Seat capacity</label>
+            <input id="capacity" name="capacity" type="number" min={1} required placeholder="Seats" />
+            <button className="searchButton">Save aircraft</button>
+          </form>
+        )}
+        <div className="dashAuthCard" style={{ marginTop: "2rem" }}>
+          <button className="textButton" onClick={handleLogout}>
+            Sign out
+          </button>
+        </div>
+      </main>
+    </AppShell>
   );
 }

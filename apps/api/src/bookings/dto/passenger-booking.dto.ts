@@ -3,6 +3,7 @@ export type PassengerBookingStatus =
 
 export interface PassengerBookingDto {
   bookingId: string;
+  reference: string;
   status: PassengerBookingStatus;
   price: number;
   createdAt: Date;
@@ -12,14 +13,20 @@ export interface PassengerBookingDto {
     aircraft: {
       model: string;
       capacity: number;
+      registration: string | null;
     };
+    operator: {
+      companyName: string;
+    } | null;
     helipad: {
+      id: string;
       name: string;
       city: string;
     };
   };
   destinationHelipad: {
+    id: string;
     name: string;
     city: string;
-  };
+  } | null;
 }

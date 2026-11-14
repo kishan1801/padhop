@@ -8,7 +8,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AircraftService } from './aircraft.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtOrSessionAuthGuard } from '../auth/jwt-or-session-auth.guard';
+import { CsrfGuard } from '../auth/csrf.guard';
+import { OriginGuard } from '../auth/origin.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
@@ -16,14 +18,14 @@ import { Roles } from '../auth/roles.decorator';
 export class AircraftController {
   constructor(private aircraftService: AircraftService) {}
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtOrSessionAuthGuard, RolesGuard)
   @Roles('operator')
   @Get('mine')
   async listMine(@Request() req) {
     return this.aircraftService.listMine(req.user.userId);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtOrSessionAuthGuard, RolesGuard, CsrfGuard, OriginGuard)
   @Roles('operator')
   @Post()
   async create(
@@ -38,18 +40,25 @@ export class AircraftController {
     );
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtOrSessionAuthGuard, RolesGuard, CsrfGuard, OriginGuard)
   @Roles('operator')
   @Post(':aircraftId/slots')
   async createSlot(
     @Request() req,
     @Param('aircraftId') aircraftId: string,
-    @Body() body: { helipadId: string; startTime: string; endTime: string },
+    @Body()
+    body: {
+      helipadId: string;
+      destinationHelipadId: string;
+      startTime: string;
+      endTime: string;
+    },
   ) {
     return this.aircraftService.createSlot(
       req.user.userId,
       aircraftId,
       body.helipadId,
+      body.destinationHelipadId,
       new Date(body.startTime),
       new Date(body.endTime),
     );

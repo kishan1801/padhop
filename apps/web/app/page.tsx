@@ -21,12 +21,7 @@ import {
 } from "@/lib/passenger-reliability";
 import { HoldRequestGate, runGuardedHold } from "@/lib/hold-request";
 import { useAuth } from "@/lib/auth-context";
-import {
-  API_URL,
-  ApiRequestError,
-  authenticate,
-  json,
-} from "@/lib/api-client";
+import { apiFetch, ApiRequestError } from "@/lib/api-client";
 
 type Helipad = {
   id: string;
@@ -42,11 +37,13 @@ type Slot = {
 };
 type HoldResponse = {
   bookingId: string;
+  reference: string;
   price: number;
   expiresInSeconds: number;
 };
 type HeldBooking = {
   bookingId: string;
+  reference: string;
   slot: Slot;
   price: number;
   expiresAt: number;
@@ -224,7 +221,7 @@ function ResultCard({
 }
 
 export default function SearchPage() {
-  const { token, setToken } = useAuth();
+  const { user, login, signup } = useAuth();
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [noticeKind, setNoticeKind] = useState<"error" | "success" | null>(null);
@@ -239,7 +236,7 @@ export default function SearchPage() {
   const [holdSecondsRemaining, setHoldSecondsRemaining] = useState<number | null>(null);
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
   const prefersReducedMotion = useReducedMotion() ?? false;
-  const [authLoading, setAuthLoading] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [holdingSlotId, setHoldingSlotId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const authPanelRef = useRef<HTMLDivElement>(null);
@@ -251,10 +248,10 @@ export default function SearchPage() {
   const holdRequestGate = useRef(new HoldRequestGate());
 
   useEffect(() => {
-    if (pendingSlot && !token) {
+    if (pendingSlot && !user) {
       authPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [pendingSlot, token]);
+  }, [pendingSlot, user]);
 
   useEffect(
     () => () => {
@@ -304,11 +301,9 @@ export default function SearchPage() {
     searchAbortController.current = controller;
 
     try {
-      const nextResults = await json<Helipad[]>(
-        await fetch(
-          `${API_URL}/helipads/nearest?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
-          { signal: controller.signal },
-        ),
+      const nextResults = await apiFetch<Helipad[]>(
+        `/api/helipads/nearest?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
+        { signal: controller.signal },
       );
       if (!searchRequests.current.isCurrent(requestId)) return;
       setResults(nextResults);
@@ -367,11 +362,9 @@ export default function SearchPage() {
       setNoticeKind(null);
     }
     try {
-      const nextSlots = await json<Slot[]>(
-        await fetch(`${API_URL}/helipads/${id}/slots`, {
-          signal: controller.signal,
-        }),
-      );
+      const nextSlots = await apiFetch<Slot[]>(`/api/helipads/${id}/slots`, {
+        signal: controller.signal,
+      });
       if (!slotRequests.current.isCurrent(requestId)) return;
       setSlots(nextSlots);
     } catch (error) {
@@ -428,8 +421,8 @@ export default function SearchPage() {
     return () => window.clearInterval(interval);
   }, [heldBooking, expireHeldBooking]);
 
-  async function hold(slot: Slot, accessToken = token) {
-    if (!accessToken) {
+  async function hold(slot: Slot) {
+    if (!user) {
       setPendingSlot(slot);
       return;
     }
@@ -445,13 +438,10 @@ export default function SearchPage() {
         clearNotice();
       },
       request: async () => {
-        const response = await json<HoldResponse>(
-          await fetch(`${API_URL}/bookings/hold/${slot.id}`, {
+        const response = await apiFetch<HoldResponse>(`/api/bookings/hold/${slot.id}`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
           body: "{}",
-          }),
-        );
+        });
         if (
           !response.bookingId ||
           !Number.isFinite(response.price) ||
@@ -480,6 +470,7 @@ export default function SearchPage() {
       onSuccess: ({ response, expiresAt }) => {
         setHeldBooking({
           bookingId: response.bookingId,
+          reference: response.reference,
           slot,
           price: response.price,
           expiresAt,
@@ -517,34 +508,28 @@ export default function SearchPage() {
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setAuthLoading(true);
+    setAuthSubmitting(true);
     clearNotice();
     try {
-      const accessToken = await authenticate(
-        authMode === "signup"
-          ? {
-            mode: "signup",
-            name: String(form.get("name")),
-            email: String(form.get("email")),
-            password: String(form.get("password")),
-          }
-          : {
-            mode: "login",
-            email: String(form.get("email")),
-            password: String(form.get("password")),
-          },
-      );
-      setToken(accessToken);
-      if (pendingSlot) await hold(pendingSlot, accessToken);
+      if (authMode === "signup") {
+        await signup(
+          String(form.get("name")),
+          String(form.get("email")),
+          String(form.get("password")),
+        );
+      } else {
+        await login(String(form.get("email")), String(form.get("password")));
+      }
+      if (pendingSlot) await hold(pendingSlot);
     } catch (error) {
       showError(error instanceof Error ? error.message : "Could not sign in.");
     } finally {
-      setAuthLoading(false);
+      setAuthSubmitting(false);
     }
   }
 
   async function confirm() {
-    if (!token || !heldBooking || confirming) return;
+    if (!user || !heldBooking || confirming) return;
     if (Date.now() >= heldBooking.expiresAt) {
       expireHeldBooking(heldBooking);
       return;
@@ -553,18 +538,15 @@ export default function SearchPage() {
     setConfirming(true);
     clearNotice();
     try {
-      await json<unknown>(
-        await fetch(`${API_URL}/bookings/confirm/${heldBooking.slot.id}`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      );
+      await apiFetch<unknown>(`/api/bookings/confirm/${heldBooking.slot.id}`, {
+        method: "POST",
+      });
       setHeldBooking(null);
       setHoldSecondsRemaining(null);
       if (selectedHelipadRef.current === heldBooking.helipadId) {
         await showSlots(heldBooking.helipadId);
       }
-      setMessage("Your charter is confirmed. We'll share flight details shortly.");
+      setMessage("Your booking is confirmed in PadHop. This does not indicate operator acceptance, payment, or flight approval.");
       setNoticeKind("success");
     } catch (error) {
       const errorMessage =
@@ -684,7 +666,7 @@ export default function SearchPage() {
           </div>
         </section>
 
-        {pendingSlot && !token && (
+        {pendingSlot && !user && (
           <section className="authPanel" ref={authPanelRef}>
             <p className="eyebrow">One last step</p>
             <h2>{authMode === "signup" ? "Create your passenger account" : "Welcome back"}</h2>
@@ -693,8 +675,8 @@ export default function SearchPage() {
               {authMode === "signup" && <input name="name" required placeholder="Your name" />}
               <input name="email" type="email" required placeholder="Email address" />
               <input name="password" type="password" minLength={8} required placeholder="Password" />
-              <button className="searchButton" disabled={authLoading}>
-                {authLoading ? "Please wait…" : authMode === "signup" ? "Create account & hold" : "Sign in & hold"}
+              <button className="searchButton" disabled={authSubmitting}>
+                {authSubmitting ? "Please wait…" : authMode === "signup" ? "Create account & hold" : "Sign in & hold"}
               </button>
               <button
                 type="button"

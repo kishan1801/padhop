@@ -84,9 +84,22 @@ export class AircraftService {
     userId: string,
     aircraftId: string,
     helipadId: string,
+    destinationHelipadId: string,
     startTime: Date,
     endTime: Date,
   ) {
+    const originId = helipadId?.trim();
+    const destinationId = destinationHelipadId?.trim();
+    if (!originId || !destinationId) {
+      throw new BadRequestException(
+        'Origin and destination helipads are required',
+      );
+    }
+    if (originId === destinationId) {
+      throw new BadRequestException(
+        'Destination must be different from the origin',
+      );
+    }
     if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
       throw new BadRequestException('Start and end times must be valid dates');
     }
@@ -119,18 +132,27 @@ export class AircraftService {
       throw new BadRequestException('End time must be after start time');
     }
 
-    const helipad = await this.prisma.helipad.findUnique({
-      where: { id: helipadId },
+    const origin = await this.prisma.helipad.findUnique({
+      where: { id: originId },
       select: { id: true },
     });
-    if (!helipad) {
-      throw new NotFoundException('Helipad not found');
+    if (!origin) {
+      throw new NotFoundException('Origin helipad not found');
+    }
+
+    const destination = await this.prisma.helipad.findUnique({
+      where: { id: destinationId },
+      select: { id: true },
+    });
+    if (!destination) {
+      throw new NotFoundException('Destination helipad not found');
     }
 
     return this.prisma.availabilitySlot.create({
       data: {
         aircraftId,
-        helipadId,
+        helipadId: originId,
+        destinationHelipadId: destinationId,
         startTime,
         endTime,
         status: 'available',

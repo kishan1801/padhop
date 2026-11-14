@@ -1,6 +1,3 @@
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -31,33 +28,43 @@ export async function json<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-type AuthenticationRequest =
-  | {
-      mode: "signup";
-      name: string;
-      email: string;
-      password: string;
+async function getCsrfToken(): Promise<string | null> {
+  if (typeof document === "undefined") return null;
+  const cookies = document.cookie.split("; ");
+  for (const cookie of cookies) {
+    if (cookie.startsWith("csrf_token=")) {
+      const value = cookie.substring("csrf_token=".length);
+      const parts = value.split(".");
+      if (parts.length === 2 && parts[0]) {
+        return parts[0];
+      }
     }
-  | {
-      mode: "login";
-      email: string;
-      password: string;
-    };
-
-export async function authenticate(
-  request: AuthenticationRequest,
-  fetcher: typeof fetch = fetch,
-): Promise<string> {
-  const { mode, ...credentials } = request;
-  const data = await json<{ accessToken?: unknown }>(
-    await fetcher(`${API_URL}/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials),
-    }),
-  );
-  if (typeof data.accessToken !== "string" || !data.accessToken) {
-    throw new Error("Authentication did not return an access token.");
   }
-  return data.accessToken;
+  return null;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  fetcher: typeof fetch = fetch,
+): Promise<T> {
+  const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(
+    (options.method || "GET").toUpperCase(),
+  );
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (isMutation) {
+    const csrfToken = await getCsrfToken();
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+  }
+  const response = await fetcher(path, {
+    ...options,
+    credentials: "include",
+    headers,
+  });
+  return json<T>(response);
 }
