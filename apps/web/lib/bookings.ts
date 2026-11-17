@@ -2,9 +2,17 @@ import { apiFetch, ApiRequestError } from "./api-client";
 
 export type PassengerBookingStatus =
   | "held"
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "expired"
+  | "cancelled_by_passenger"
+  | "cancelled_by_operator"
+  | "terminated_by_operator"
+  | "in_progress"
+  | "completed"
   | "confirmed"
-  | "cancelled"
-  | "completed";
+  | "cancelled";
 
 export type BookingHelipad = {
   id: string;
@@ -18,6 +26,8 @@ export type PassengerBooking = {
   status: PassengerBookingStatus;
   price: number;
   createdAt: string;
+  requestedAt: string | null;
+  decisionDeadline: string | null;
   slot: {
     startTime: string;
     endTime: string;
@@ -85,12 +95,16 @@ export function partitionBookings(
   now = Date.now(),
 ): PassengerJourneyGroups {
   const isInProgress = (booking: PassengerBooking) =>
-    booking.status === "confirmed" &&
-    Date.parse(booking.slot.startTime) <= now &&
-    Date.parse(booking.slot.endTime) >= now;
+    booking.status === "in_progress" ||
+    (booking.status === "confirmed" &&
+      Date.parse(booking.slot.startTime) <= now &&
+      Date.parse(booking.slot.endTime) >= now);
 
   const isUpcoming = (booking: PassengerBooking) =>
-    (booking.status === "held" || booking.status === "confirmed") &&
+    (booking.status === "held" ||
+      booking.status === "requested" ||
+      booking.status === "accepted" ||
+      booking.status === "confirmed") &&
     Date.parse(booking.slot.endTime) > now &&
     !isInProgress(booking);
 

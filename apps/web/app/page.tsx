@@ -72,12 +72,25 @@ type PendingRouteHold = {
   };
 };
 
-type ConfirmedRouteSummary = {
+type BookingRequestResponse = {
+  bookingId: string;
+  reference: string;
+  slotId: string;
+  status: string;
+  requestedAt: string | null;
+  decisionDeadline: string | null;
+  price: number;
+  duplicate: boolean;
+};
+
+type RequestSummary = {
   reference: string;
   aircraftModel: string;
   origin: HelipadOption;
   destination: HelipadOption;
   operatorName: string | null;
+  requestedAt: string | null;
+  decisionDeadline: string | null;
 };
 
 type HelipadOption = {
@@ -283,15 +296,14 @@ export default function SearchPage() {
   const [slotLoadError, setSlotLoadError] = useState(false);
   const [pendingRouteHold, setPendingRouteHold] =
     useState<PendingRouteHold | null>(null);
-  const [lastConfirmation, setLastConfirmation] =
-    useState<ConfirmedRouteSummary | null>(null);
+  const [lastRequest, setLastRequest] = useState<RequestSummary | null>(null);
   const [heldBooking, setHeldBooking] = useState<HeldBooking | null>(null);
   const [holdSecondsRemaining, setHoldSecondsRemaining] = useState<number | null>(null);
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
   const prefersReducedMotion = useReducedMotion() ?? false;
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [holdingSlotId, setHoldingSlotId] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [submittingRequest, setSubmittingRequest] = useState(false);
   const authPanelRef = useRef<HTMLDivElement>(null);
   const searchRequests = useRef(new RequestSequence());
   const slotRequests = useRef(new RequestSequence());
@@ -624,7 +636,7 @@ export default function SearchPage() {
       slotId: slot.id,
       onStart: () => {
         setHoldingSlotId(slot.id);
-        setLastConfirmation(null);
+        setLastRequest(null);
         clearNotice();
       },
       request: async () => {
@@ -720,28 +732,31 @@ export default function SearchPage() {
     }
   }
 
-  async function confirm() {
-    if (!user || !heldBooking || confirming) return;
+  async function submitRequest() {
+    if (!user || !heldBooking || submittingRequest) return;
     if (Date.now() >= heldBooking.expiresAt) {
       expireHeldBooking(heldBooking);
       return;
     }
 
-    setConfirming(true);
+    setSubmittingRequest(true);
     clearNotice();
     try {
-      await apiFetch<unknown>(`/api/bookings/confirm/${heldBooking.slot.id}`, {
-        method: "POST",
-      });
+      const response = await apiFetch<BookingRequestResponse>(
+        `/api/bookings/request/${heldBooking.slot.id}`,
+        { method: "POST" },
+      );
       setHeldBooking(null);
       setHoldSecondsRemaining(null);
       if (heldBooking.route) {
-        setLastConfirmation({
-          reference: heldBooking.reference,
+        setLastRequest({
+          reference: response.reference ?? heldBooking.reference,
           aircraftModel: heldBooking.slot.aircraft.model,
           origin: heldBooking.route.origin,
           destination: heldBooking.route.destination,
           operatorName: heldBooking.route.operatorName,
+          requestedAt: response.requestedAt ?? null,
+          decisionDeadline: response.decisionDeadline ?? null,
         });
         await searchRoute(
           heldBooking.route.origin.id,
@@ -750,11 +765,15 @@ export default function SearchPage() {
       } else if (selectedHelipadRef.current === heldBooking.helipadId) {
         await showSlots(heldBooking.helipadId);
       }
-      setMessage("Your booking is confirmed in PadHop. This does not indicate operator acceptance, payment, or flight approval.");
+      setMessage(
+        "Your booking request was submitted and is awaiting operator response. This does not indicate operator acceptance, payment, or flight approval.",
+      );
       setNoticeKind("success");
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Could not confirm this booking record.";
+        error instanceof Error
+          ? error.message
+          : "Could not submit this booking request.";
       if (error instanceof ApiRequestError && error.status === 409) {
         setHeldBooking(null);
         setHoldSecondsRemaining(null);
@@ -773,7 +792,7 @@ export default function SearchPage() {
         showError(errorMessage);
       }
     } finally {
-      setConfirming(false);
+      setSubmittingRequest(false);
     }
   }
 
@@ -1017,36 +1036,52 @@ export default function SearchPage() {
                 <strong>{holdPriceFormatter.format(heldBooking.price)}</strong>
               </p>
               <p className="holdExplain">
-                Confirming records a booking in PadHop only. It does not
+                Submitting sends a booking request to PadHop. It does not
                 represent operator acceptance or flight approval.
               </p>
             </div>
-            <button className="searchButton" onClick={confirm} disabled={confirming}>
-              {confirming ? "Confirming…" : "Confirm booking record"}
+            <button
+              className="searchButton"
+              onClick={submitRequest}
+              disabled={submittingRequest}
+            >
+              {submittingRequest ? "Submitting…" : "Submit booking request"}
             </button>
           </section>
         )}
 
-        {lastConfirmation && (
-          <section className="holdPanel" aria-label="Booking confirmation">
+        {lastRequest && (
+          <section className="holdPanel" aria-label="Booking request submitted">
             <div>
-              <p className="eyebrow">Journey requested</p>
-              <h2><Plane size={18} /> {lastConfirmation.aircraftModel}</h2>
+              <p className="eyebrow">Booking request submitted</p>
+              <h2><Plane size={18} /> {lastRequest.aircraftModel}</h2>
               <p className="holdRoute">
                 <MapPin size={14} aria-hidden="true" />
-                <strong>{lastConfirmation.origin.name}</strong>
+                <strong>{lastRequest.origin.name}</strong>
                 <ArrowRight size={14} aria-hidden="true" />
-                <strong>{lastConfirmation.destination.name}</strong>
+                <strong>{lastRequest.destination.name}</strong>
                 <span className="holdRouteOperator">
-                  · {lastConfirmation.operatorName ?? "Operator not listed"}
+                  · {lastRequest.operatorName ?? "Operator not listed"}
                 </span>
               </p>
               <p>
-                Booking reference: <code>{lastConfirmation.reference}</code>
+                Booking reference: <code>{lastRequest.reference}</code>
               </p>
+              {lastRequest.decisionDeadline && (
+                <p>
+                  Operator response requested by{" "}
+                  <strong>
+                    {new Date(lastRequest.decisionDeadline).toLocaleString([], {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </strong>
+                  .
+                </p>
+              )}
               <p>
-                This is a PadHop booking record. It does not indicate operator
-                acceptance, payment, or flight approval.
+                Awaiting operator response. This request does not indicate
+                operator acceptance, payment, or flight approval.
               </p>
             </div>
           </section>

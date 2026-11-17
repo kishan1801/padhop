@@ -821,220 +821,199 @@ describe('BookingsService', () => {
     });
   });
 
-  describe('confirmSlot', () => {
-    it('confirms the booking and deletes its Redis ownership key', async () => {
-      redis.get.mockResolvedValue('user-1');
-      const findFirst = jest.fn().mockResolvedValue({
-        id: 'booking-1',
-        userId: 'user-1',
-        status: 'held',
-        destinationHelipadId: 'helipad-2',
-      });
-      prisma.$transaction.mockImplementation(async (fn) =>
+
+  describe('requestSlot', () => {
+    const requestedBooking = {
+      id: 'booking-1',
+      reference: 'PH-20261118-ABCDEFGH',
+      status: 'requested',
+      price: 48000,
+      requestedAt: new Date('2026-11-18T10:00:00Z'),
+      decisionDeadline: new Date('2026-11-19T10:00:00Z'),
+    };
+
+    type TxOptions = {
+      updateCount?: number;
+      slotStatus?: string;
+      heldDestination?: string | null;
+      secondLookupStatus?: 'requested' | null;
+      eventRejects?: boolean;
+    };
+
+    function arrangeTransaction(options: TxOptions = {}) {
+      const {
+        updateCount = 1,
+        slotStatus = 'held',
+        heldDestination = 'helipad-2',
+        secondLookupStatus = 'requested',
+        eventRejects = false,
+      } = options;
+
+      const txBookingFindFirst = jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'booking-1',
+          userId: 'user-1',
+          status: 'held',
+          destinationHelipadId: heldDestination,
+        })
+        .mockResolvedValue(
+          secondLookupStatus === 'requested'
+            ? { ...requestedBooking }
+            : null,
+        );
+      const updateMany = jest.fn().mockResolvedValue({ count: updateCount });
+      const findUniqueOrThrow = jest.fn().mockResolvedValue(requestedBooking);
+      const eventCreate = eventRejects
+        ? jest.fn().mockRejectedValue(new Error('event write failed'))
+        : jest.fn().mockResolvedValue({ id: 'event-1' });
+      const slotUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
         fn({
           booking: {
-            findFirst,
-            update: jest.fn().mockResolvedValue({
-              id: 'booking-1',
-              status: 'confirmed',
-            }),
+            findFirst: txBookingFindFirst,
+            updateMany,
+            findUniqueOrThrow,
           },
           availabilitySlot: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'slot-1',
+              status: slotStatus,
               helipadId: 'helipad-1',
               destinationHelipadId: 'helipad-2',
             }),
-            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            updateMany: slotUpdateMany,
           },
-          helipad: {
-            findUnique: jest.fn().mockResolvedValue({ id: 'helipad-2' }),
-          },
+          bookingEvent: { create: eventCreate },
         }),
       );
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).resolves.toEqual({
-        bookingId: 'booking-1',
-        slotId: 'slot-1',
-        status: 'confirmed',
-      });
+      return { updateMany, eventCreate, findUniqueOrThrow, slotUpdateMany };
+    }
 
+    beforeEach(() => {
+      prisma.booking.findFirst.mockResolvedValue(null);
+      redis.get.mockResolvedValue('user-1');
+    });
+
+    it('transitions a held booking to requested and records one event', async () => {
+      const { updateMany, eventCreate, slotUpdateMany } = arrangeTransaction();
+
+      const result = await service.requestSlot('slot-1', 'user-1');
+
+      expect(result.status).toBe('requested');
+      expect(result.duplicate).toBe(false);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'booking-1', userId: 'user-1', status: 'held' },
+        data: expect.objectContaining({
+          status: 'requested',
+          requestedAt: expect.any(Date),
+          decisionDeadline: expect.any(Date),
+        }),
+      });
+      expect(eventCreate).toHaveBeenCalledTimes(1);
+      expect(eventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bookingId: 'booking-1',
+          actorId: 'user-1',
+          actorRole: 'passenger',
+          type: 'requested',
+          fromStatus: 'held',
+          toStatus: 'requested',
+        }),
+      });
+      // The slot must stay reserved for the requested booking.
+      expect(slotUpdateMany).not.toHaveBeenCalled();
       expect(redis.del).toHaveBeenCalledWith('hold:slot-1');
     });
 
-    it('throws ConflictException if the Redis hold belongs to a different user', async () => {
-      redis.get.mockResolvedValue('someone-else');
+    it('sets the decision deadline exactly 24 hours after server request time', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-18T10:00:00Z'));
+      const { updateMany } = arrangeTransaction();
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
-        ConflictException,
-      );
+      await service.requestSlot('slot-1', 'user-1');
+
+      const data = updateMany.mock.calls[0][0].data;
+      expect(data.requestedAt).toEqual(new Date('2026-11-18T10:00:00Z'));
+      expect(data.decisionDeadline).toEqual(new Date('2026-11-19T10:00:00Z'));
+      expect(
+        data.decisionDeadline.getTime() - data.requestedAt.getTime(),
+      ).toBe(24 * 60 * 60 * 1000);
+      jest.useRealTimers();
     });
 
-    it('rejects an expired hold when its Redis key is missing', async () => {
-      redis.get.mockResolvedValue(null);
+    it('rejects a passenger who does not own the Redis hold', async () => {
+      redis.get.mockResolvedValue('someone-else');
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
         ConflictException,
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('confirms the booking even if deleting the Redis key fails afterward', async () => {
-      const warnSpy = jest
-        .spyOn(Logger.prototype, 'warn')
-        .mockImplementation(() => undefined);
-      redis.get.mockResolvedValue('user-1');
-      redis.del.mockRejectedValue(new Error('Redis unavailable'));
-      const findFirst = jest.fn().mockResolvedValue({
-        id: 'booking-1',
-        userId: 'user-1',
-        status: 'held',
-        destinationHelipadId: 'helipad-2',
-      });
-      const slotUpdate = jest.fn().mockResolvedValue({ count: 1 });
-      const bookingUpdate = jest.fn().mockResolvedValue({
-        id: 'booking-1',
-        status: 'confirmed',
-      });
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          booking: {
-            findFirst,
-            update: bookingUpdate,
-          },
-          availabilitySlot: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'slot-1',
-              helipadId: 'helipad-1',
-              destinationHelipadId: 'helipad-2',
-            }),
-            updateMany: slotUpdate,
-          },
-          helipad: {
-            findUnique: jest.fn().mockResolvedValue({ id: 'helipad-2' }),
-          },
-        }),
-      );
+    it('rejects a missing or expired Redis hold', async () => {
+      redis.get.mockResolvedValue(null);
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).resolves.toEqual({
-        bookingId: 'booking-1',
-        slotId: 'slot-1',
-        status: 'confirmed',
-      });
-
-      expect(findFirst).toHaveBeenCalledWith({
-        where: { slotId: 'slot-1', userId: 'user-1', status: 'held' },
-      });
-      expect(slotUpdate).toHaveBeenCalledWith({
-        where: { id: 'slot-1', status: 'held' },
-        data: { status: 'confirmed' },
-      });
-      expect(bookingUpdate).toHaveBeenCalledWith({
-        where: { id: 'booking-1' },
-        data: { status: 'confirmed' },
-      });
-      expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
-    });
-
-    it('rejects confirmation when the stored destination differs from the slot route', async () => {
-      redis.get.mockResolvedValue('user-1');
-      const bookingUpdate = jest.fn();
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          booking: {
-            findFirst: jest.fn().mockResolvedValue({
-              id: 'booking-1',
-              userId: 'user-1',
-              status: 'held',
-              destinationHelipadId: 'helipad-9',
-            }),
-            update: bookingUpdate,
-          },
-          availabilitySlot: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'slot-1',
-              helipadId: 'helipad-1',
-              destinationHelipadId: 'helipad-2',
-            }),
-            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-          },
-          helipad: { findUnique: jest.fn() },
-        }),
-      );
-
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
         ConflictException,
       );
-      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent when the request was already submitted', async () => {
+      prisma.booking.findFirst.mockResolvedValue({
+        id: 'booking-1',
+        ...requestedBooking,
+      });
+
+      const result = await service.requestSlot('slot-1', 'user-1');
+
+      expect(result.duplicate).toBe(true);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(redis.get).not.toHaveBeenCalled();
       expect(redis.del).not.toHaveBeenCalled();
     });
 
-    it('rejects confirmation when the stored destination record no longer exists', async () => {
-      redis.get.mockResolvedValue('user-1');
-      const bookingUpdate = jest.fn();
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          booking: {
-            findFirst: jest.fn().mockResolvedValue({
-              id: 'booking-1',
-              userId: 'user-1',
-              status: 'held',
-              destinationHelipadId: 'helipad-2',
-            }),
-            update: bookingUpdate,
-          },
-          availabilitySlot: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'slot-1',
-              helipadId: 'helipad-1',
-              destinationHelipadId: 'helipad-2',
-            }),
-            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-          },
-          helipad: { findUnique: jest.fn().mockResolvedValue(null) },
-        }),
-      );
+    it('does not duplicate events when the conditional transition loses a race', async () => {
+      const { eventCreate } = arrangeTransaction({
+        updateCount: 0,
+        secondLookupStatus: 'requested',
+      });
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
-      expect(bookingUpdate).not.toHaveBeenCalled();
+      const result = await service.requestSlot('slot-1', 'user-1');
+
+      expect(result.duplicate).toBe(true);
+      expect(eventCreate).not.toHaveBeenCalled();
     });
 
-    it('rejects confirmation for a legacy booking with no destination', async () => {
-      redis.get.mockResolvedValue('user-1');
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          booking: {
-            findFirst: jest.fn().mockResolvedValue({
-              id: 'booking-1',
-              userId: 'user-1',
-              status: 'held',
-              destinationHelipadId: null,
-            }),
-            update: jest.fn(),
-          },
-          availabilitySlot: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'slot-1',
-              helipadId: 'helipad-1',
-              destinationHelipadId: 'helipad-2',
-            }),
-            updateMany: jest.fn(),
-          },
-          helipad: { findUnique: jest.fn() },
-        }),
-      );
+    it('rejects when the slot is no longer held', async () => {
+      arrangeTransaction({ slotStatus: 'available' });
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(redis.del).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the booking route is inconsistent with the slot', async () => {
+      arrangeTransaction({ heldDestination: 'helipad-9' });
+
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
         ConflictException,
       );
     });
 
-    it('rejects confirmation when the destination equals the origin', async () => {
-      redis.get.mockResolvedValue('user-1');
-      prisma.$transaction.mockImplementation(async (fn) =>
+    it('rejects a legacy booking with no route destination', async () => {
+      arrangeTransaction({ heldDestination: null });
+
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('rejects when a route points back to its origin', async () => {
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
         fn({
           booking: {
             findFirst: jest.fn().mockResolvedValue({
@@ -1043,50 +1022,314 @@ describe('BookingsService', () => {
               status: 'held',
               destinationHelipadId: 'helipad-1',
             }),
-            update: jest.fn(),
+            updateMany: jest.fn(),
+            findUniqueOrThrow: jest.fn(),
           },
           availabilitySlot: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'slot-1',
+              status: 'held',
               helipadId: 'helipad-1',
               destinationHelipadId: 'helipad-1',
             }),
             updateMany: jest.fn(),
           },
-          helipad: { findUnique: jest.fn() },
+          bookingEvent: { create: jest.fn() },
         }),
       );
 
-      await expect(service.confirmSlot('slot-1', 'user-1')).rejects.toThrow(
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
         ConflictException,
+      );
+    });
+
+    it('does not report success when the event write fails', async () => {
+      arrangeTransaction({ eventRejects: true });
+
+      await expect(service.requestSlot('slot-1', 'user-1')).rejects.toThrow(
+        'event write failed',
+      );
+    });
+
+    it('repeated submission remains idempotent after Redis hold deletion', async () => {
+      arrangeTransaction();
+      await service.requestSlot('slot-1', 'user-1');
+
+      redis.get.mockResolvedValue(null);
+      prisma.booking.findFirst.mockResolvedValue({
+        id: 'booking-1',
+        ...requestedBooking,
+      });
+
+      const second = await service.requestSlot('slot-1', 'user-1');
+      expect(second.duplicate).toBe(true);
+    });
+
+    it('confirmSlot keeps identical request semantics as a deprecated alias', async () => {
+      const spy = jest
+        .spyOn(service, 'requestSlot')
+        .mockResolvedValue({ duplicate: false } as never);
+
+      await service.confirmSlot('slot-1', 'user-1');
+
+      expect(spy).toHaveBeenCalledWith('slot-1', 'user-1');
+      spy.mockRestore();
+    });
+
+    it('exposes requested timestamps in passenger DTO responses', async () => {
+      prisma.booking.findFirst.mockResolvedValue({
+        id: 'booking-1',
+        reference: 'PH-20261118-ABCDEFGH',
+        status: 'requested',
+        price: 48000,
+        createdAt: new Date('2026-11-18T09:55:00Z'),
+        requestedAt: requestedBooking.requestedAt,
+        decisionDeadline: requestedBooking.decisionDeadline,
+        slot: {
+          startTime: new Date('2026-11-20T10:00:00Z'),
+          endTime: new Date('2026-11-20T11:00:00Z'),
+          aircraft: {
+            model: 'Bell 407',
+            capacity: 6,
+            registration: 'VT-TEST1',
+            operator: { companyName: 'Test Charter Co' },
+          },
+          helipad: { id: 'helipad-1', name: 'HAL Helipad', city: 'Bengaluru' },
+        },
+        destinationHelipad: {
+          id: 'helipad-2',
+          name: 'Kempegowda Airport Helipad',
+          city: 'Bengaluru',
+        },
+      });
+
+      const booking = await service.getPassengerBookingById(
+        'user-1',
+        'booking-1',
+      );
+
+      expect(booking?.status).toBe('requested');
+      expect(booking?.requestedAt).toEqual(requestedBooking.requestedAt);
+      expect(booking?.decisionDeadline).toEqual(
+        requestedBooking.decisionDeadline,
       );
     });
   });
 
-  describe('releaseExpiredHolds', () => {
-    it('does not release a slot confirmed after cleanup fetched held slots', async () => {
-      prisma.availabilitySlot.findMany.mockResolvedValue([{ id: 'slot-1' }]);
-      redis.exists.mockResolvedValue(0);
-      const slotUpdate = jest.fn().mockResolvedValue({ count: 0 });
-      const bookingUpdateMany = jest.fn();
-      prisma.$transaction.mockImplementation(async (fn) =>
+  describe('expiry sweeper', () => {
+    type TxCounts = {
+      bookingCount?: number;
+      slotCount?: number;
+      eventRejects?: boolean;
+    };
+
+    function arrangeExpiryTx(options: TxCounts = {}) {
+      const { bookingCount = 1, slotCount = 1, eventRejects = false } = options;
+      const bookingUpdate = jest.fn().mockResolvedValue({ count: bookingCount });
+      const slotUpdate = jest.fn().mockResolvedValue({ count: slotCount });
+      const eventCreate = eventRejects
+        ? jest.fn().mockRejectedValue(new Error('event write failed'))
+        : jest.fn().mockResolvedValue({ id: 'event-1' });
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
         fn({
+          booking: { updateMany: bookingUpdate },
           availabilitySlot: { updateMany: slotUpdate },
-          booking: { updateMany: bookingUpdateMany },
+          bookingEvent: { create: eventCreate },
         }),
       );
+      return { bookingUpdate, slotUpdate, eventCreate };
+    }
+
+    it('only sweeps five-minute holds that are still in held state', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'held'
+              ? [{ id: 'booking-1', slotId: 'slot-1' }]
+              : [],
+          ),
+      );
+      redis.exists.mockResolvedValue(0);
+      const { bookingUpdate, slotUpdate, eventCreate } = arrangeExpiryTx();
 
       await service.releaseExpiredHolds();
 
-      expect(prisma.availabilitySlot.findMany).toHaveBeenCalledWith({
-        where: { status: 'held' },
-        select: { id: true },
+      expect(prisma.booking.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: 'held', slot: { status: 'held' } },
+        }),
+      );
+      expect(bookingUpdate).toHaveBeenCalledWith({
+        where: { id: 'booking-1', status: 'held' },
+        data: expect.objectContaining({ status: 'cancelled' }),
       });
       expect(slotUpdate).toHaveBeenCalledWith({
         where: { id: 'slot-1', status: 'held' },
         data: { status: 'available' },
       });
-      expect(bookingUpdateMany).not.toHaveBeenCalled();
+      expect(eventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'hold_expired',
+          actorId: null,
+          actorRole: 'system',
+          fromStatus: 'held',
+          toStatus: 'cancelled',
+        }),
+      });
+    });
+
+    it('keeps holds whose Redis key still exists', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'held'
+              ? [{ id: 'booking-1', slotId: 'slot-1' }]
+              : [],
+          ),
+      );
+      redis.exists.mockResolvedValue(1);
+      const { bookingUpdate, eventCreate } = arrangeExpiryTx();
+
+      await service.releaseExpiredHolds();
+
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('expires only requested bookings past their deadline', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'requested'
+              ? [{ id: 'booking-2', slotId: 'slot-2' }]
+              : [],
+          ),
+      );
+      const { bookingUpdate, slotUpdate, eventCreate } = arrangeExpiryTx();
+
+      await service.releaseExpiredHolds();
+
+      expect(prisma.booking.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'requested',
+            decisionDeadline: { lte: expect.any(Date) },
+          },
+        }),
+      );
+      expect(bookingUpdate).toHaveBeenCalledWith({
+        where: {
+          id: 'booking-2',
+          status: 'requested',
+          decisionDeadline: { lte: expect.any(Date) },
+        },
+        data: { status: 'expired' },
+      });
+      expect(slotUpdate).toHaveBeenCalledWith({
+        where: { id: 'slot-2', status: 'held' },
+        data: { status: 'available' },
+      });
+      expect(eventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'expired',
+          actorId: null,
+          actorRole: 'system',
+          fromStatus: 'requested',
+          toStatus: 'expired',
+        }),
+      });
+    });
+
+    it('leaves future-deadline requests reserved', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'requested'
+              ? [{ id: 'booking-2', slotId: 'slot-2' }]
+              : [],
+          ),
+      );
+      // Simulate the database returning no rows because the deadline is in the future.
+      const { bookingUpdate, eventCreate } = arrangeExpiryTx({
+        bookingCount: 0,
+      });
+
+      await service.releaseExpiredHolds();
+
+      expect(bookingUpdate).toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('releases the slot exactly once when the conditional transition loses a race', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'requested'
+              ? [{ id: 'booking-2', slotId: 'slot-2' }]
+              : [],
+          ),
+      );
+      const { slotUpdate, eventCreate } = arrangeExpiryTx({
+        bookingCount: 0,
+      });
+
+      await service.releaseExpiredHolds();
+
+      expect(slotUpdate).not.toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('writes exactly one expiry event per booking', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'requested'
+              ? [{ id: 'booking-2', slotId: 'slot-2' }]
+              : [],
+          ),
+      );
+      const { eventCreate } = arrangeExpiryTx();
+
+      await service.releaseExpiredHolds();
+
+      expect(eventCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not touch legacy confirmed or cancelled bookings', async () => {
+      prisma.booking.findMany.mockImplementation(
+        () => Promise.resolve([]),
+      );
+      const { bookingUpdate } = arrangeExpiryTx();
+
+      await service.releaseExpiredHolds();
+
+      const statuses = prisma.booking.findMany.mock.calls.map(
+        (call) => call[0].where.status,
+      );
+      expect(statuses).toEqual(['held', 'requested']);
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release a requested booking when its Redis key is gone', async () => {
+      prisma.booking.findMany.mockImplementation(
+        (args: { where: { status: string } }) =>
+          Promise.resolve(
+            args.where.status === 'requested'
+              ? [{ id: 'booking-2', slotId: 'slot-2' }]
+              : [],
+          ),
+      );
+      redis.exists.mockResolvedValue(0);
+      const { bookingUpdate } = arrangeExpiryTx();
+
+      await service.releaseExpiredHolds();
+
+      // The held-phase query uses status 'held', so a requested booking can only
+      // be expired through the deadline predicate.
+      expect(bookingUpdate).toHaveBeenCalledTimes(1);
+      expect(bookingUpdate.mock.calls[0][0].data).toEqual({
+        status: 'expired',
+      });
     });
   });
 });

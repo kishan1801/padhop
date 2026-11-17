@@ -41,6 +41,52 @@ const statusDetails: Record<
       "This is a temporary booking hold. It expires automatically if not confirmed.",
     icon: Clock3,
   },
+  requested: {
+    label: "Requested",
+    description:
+      "Awaiting operator response. PadHop has not accepted this request; acceptance and flight approval rest with the licensed operator.",
+    icon: Clock3,
+  },
+  accepted: {
+    label: "Accepted by operator",
+    description:
+      "The operator accepted this request in PadHop. Flight approval and operational clearance remain with the operator and pilots.",
+    icon: CheckCircle2,
+  },
+  declined: {
+    label: "Declined",
+    description:
+      "The operator declined this request. The slot was released.",
+    icon: XCircle,
+  },
+  expired: {
+    label: "Request expired",
+    description:
+      "No operator response was received before the 24-hour deadline, so the request expired and the slot was released.",
+    icon: XCircle,
+  },
+  cancelled_by_passenger: {
+    label: "Cancelled by you",
+    description: "You cancelled this request before commencement.",
+    icon: XCircle,
+  },
+  cancelled_by_operator: {
+    label: "Cancelled by operator",
+    description: "The operator cancelled this journey before commencement.",
+    icon: XCircle,
+  },
+  terminated_by_operator: {
+    label: "Journey terminated",
+    description:
+      "The operator recorded a termination for this journey. Contact the operator for operational details.",
+    icon: XCircle,
+  },
+  in_progress: {
+    label: "In progress",
+    description:
+      "The operator recorded journey commencement. Flight status details are not shown here.",
+    icon: Plane,
+  },
   confirmed: {
     label: "Confirmed",
     description:
@@ -91,6 +137,21 @@ function JourneyCard({ booking }: { booking: PassengerBooking }) {
         </div>
         <BookingStatus status={booking.status} />
       </header>
+
+      {booking.status === "requested" && (
+        <p className="journeyRequestMeta">
+          Requested{" "}
+          {booking.requestedAt
+            ? formatDateTime(booking.requestedAt)
+            : "recently"}
+          {booking.decisionDeadline ? (
+            <>
+              {" · "}Operator response by{" "}
+              <strong>{formatDateTime(booking.decisionDeadline)}</strong>
+            </>
+          ) : null}
+        </p>
+      )}
 
       <h3 className="journeyAircraft">
         <Plane size={18} aria-hidden="true" />

@@ -56,11 +56,25 @@ export class BookingsController {
   }
 
   @UseGuards(JwtOrSessionAuthGuard, CsrfGuard, OriginGuard)
+  @Post('request/:slotId')
+  async request(
+    @Param('slotId') slotId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.bookingsService.requestSlot(slotId, req.user.userId);
+  }
+
+  /**
+   * @deprecated Use POST /bookings/request/:slotId. This alias has identical
+   * request-submission semantics and will be removed after one release. It no
+   * longer sets the booking directly to `confirmed`.
+   */
+  @UseGuards(JwtOrSessionAuthGuard, CsrfGuard, OriginGuard)
   @Post('confirm/:slotId')
   async confirm(
     @Param('slotId') slotId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.bookingsService.confirmSlot(slotId, req.user.userId);
+    return this.bookingsService.requestSlot(slotId, req.user.userId);
   }
 }

@@ -11,8 +11,16 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PricingService } from '../pricing/pricing.service';
 import { generateBookingReference } from './booking-reference';
 import type { PassengerBookingDto } from './dto/passenger-booking.dto';
+import type { Prisma } from '../../generated/prisma/client';
+
+type BookingEventCreate = Omit<
+  Prisma.BookingEventUncheckedCreateInput,
+  'bookingId' | 'actorId' | 'actorRole'
+>;
 
 const HOLD_TTL_SECONDS = 5 * 60; // 5 minutes
+const REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+const EXPIRY_BATCH_SIZE = 50;
 const MAX_REFERENCE_RETRIES = 3;
 @Injectable()
 export class BookingsService {
@@ -187,6 +195,8 @@ export class BookingsService {
         status: true,
         price: true,
         createdAt: true,
+        requestedAt: true,
+        decisionDeadline: true,
         slot: {
           select: {
             startTime: true,
@@ -214,6 +224,8 @@ export class BookingsService {
       status: booking.status,
       price: Number(booking.price),
       createdAt: booking.createdAt,
+      requestedAt: booking.requestedAt,
+      decisionDeadline: booking.decisionDeadline,
       slot: {
         startTime: booking.slot.startTime,
         endTime: booking.slot.endTime,
@@ -241,6 +253,8 @@ export class BookingsService {
         status: true,
         price: true,
         createdAt: true,
+        requestedAt: true,
+        decisionDeadline: true,
         slot: {
           select: {
             startTime: true,
@@ -272,6 +286,8 @@ export class BookingsService {
       status: booking.status,
       price: Number(booking.price),
       createdAt: booking.createdAt,
+      requestedAt: booking.requestedAt,
+      decisionDeadline: booking.decisionDeadline,
       slot: {
         startTime: booking.slot.startTime,
         endTime: booking.slot.endTime,
@@ -287,7 +303,50 @@ export class BookingsService {
     };
   }
 
-  async confirmSlot(slotId: string, userId: string) {
+  private async appendBookingEvent(
+    tx: Prisma.TransactionClient,
+    bookingId: string,
+    actorId: string | null,
+    actorRole: string,
+    event: BookingEventCreate,
+  ) {
+    return tx.bookingEvent.create({
+      data: { bookingId, actorId, actorRole, ...event },
+    });
+  }
+
+  /**
+   * Submits a held slot as a booking request (held -> requested) and starts the
+   * operator response deadline. Redis only governs the initial hold; after this
+   * transition the persisted database deadline is authoritative.
+   */
+  async requestSlot(slotId: string, userId: string) {
+    // Idempotent repeat: the passenger already submitted this request. This does
+    // not depend on the Redis hold key, which may already be gone.
+    const alreadyRequested = await this.prisma.booking.findFirst({
+      where: { slotId, userId, status: 'requested' },
+      select: {
+        id: true,
+        reference: true,
+        status: true,
+        price: true,
+        requestedAt: true,
+        decisionDeadline: true,
+      },
+    });
+    if (alreadyRequested) {
+      return {
+        bookingId: alreadyRequested.id,
+        reference: alreadyRequested.reference,
+        slotId,
+        status: alreadyRequested.status,
+        requestedAt: alreadyRequested.requestedAt,
+        decisionDeadline: alreadyRequested.decisionDeadline,
+        price: Number(alreadyRequested.price),
+        duplicate: true,
+      };
+    }
+
     const heldBy = await this.redis.get(`hold:${slotId}`);
     if (heldBy !== userId) {
       throw new ConflictException(
@@ -295,67 +354,109 @@ export class BookingsService {
       );
     }
 
+    const requestedAt = new Date();
+    const decisionDeadline = new Date(requestedAt.getTime() + REQUEST_WINDOW_MS);
+
     const booking = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.booking.findFirst({
         where: { slotId, userId, status: 'held' },
       });
-      if (!existing || existing.userId !== userId) {
+      if (!existing) {
+        // A concurrent submission may have won; return the request if it is ours.
+        const current = await tx.booking.findFirst({
+          where: { slotId, userId, status: 'requested' },
+          select: {
+            id: true,
+            reference: true,
+            status: true,
+            price: true,
+            requestedAt: true,
+            decisionDeadline: true,
+          },
+        });
+        if (current) {
+          return { ...current, duplicate: true };
+        }
         throw new ConflictException('Slot is not currently held by you');
       }
 
       const slot = await tx.availabilitySlot.findUnique({
         where: { id: slotId },
-        select: { id: true, helipadId: true, destinationHelipadId: true },
+        select: {
+          id: true,
+          status: true,
+          helipadId: true,
+          destinationHelipadId: true,
+        },
       });
       if (!slot) {
         throw new NotFoundException('Slot not found');
       }
-
-      // Route integrity: both origin-only legacy bookings and bookings whose
-      // destination no longer matches the declared slot leg are rejected.
-      if (!slot.destinationHelipadId || !existing.destinationHelipadId) {
-        throw new ConflictException(
-          'Booking route is incomplete and cannot be confirmed',
-        );
+      if (slot.status !== 'held') {
+        throw new ConflictException('Slot is no longer held for this request');
       }
-      if (existing.destinationHelipadId !== slot.destinationHelipadId) {
+      if (
+        !slot.destinationHelipadId ||
+        existing.destinationHelipadId !== slot.destinationHelipadId ||
+        existing.destinationHelipadId === slot.helipadId
+      ) {
         throw new ConflictException(
-          'Booking destination does not match the declared slot route',
-        );
-      }
-      if (existing.destinationHelipadId === slot.helipadId) {
-        throw new ConflictException(
-          'Booking destination must be different from the origin',
+          'Booking route is inconsistent with the declared slot route',
         );
       }
 
-      const destination = await tx.helipad.findUnique({
-        where: { id: existing.destinationHelipadId },
-        select: { id: true },
+      const transitioned = await tx.booking.updateMany({
+        where: { id: existing.id, userId, status: 'held' },
+        data: { status: 'requested', requestedAt, decisionDeadline },
       });
-      if (!destination) {
-        throw new NotFoundException('Destination helipad not found');
+      if (transitioned.count === 0) {
+        // Lost a race to the expiry job or another submission.
+        const current = await tx.booking.findFirst({
+          where: { slotId, userId, status: 'requested' },
+          select: {
+            id: true,
+            reference: true,
+            status: true,
+            price: true,
+            requestedAt: true,
+            decisionDeadline: true,
+          },
+        });
+        if (current) {
+          return { ...current, duplicate: true };
+        }
+        throw new ConflictException('Booking is no longer held');
       }
 
-      const updated = await tx.availabilitySlot.updateMany({
-        where: { id: slotId, status: 'held' },
-        data: { status: 'confirmed' },
-      });
-      if (updated.count === 0)
-        throw new ConflictException('Slot is not currently held');
-
-      return tx.booking.update({
+      const updated = await tx.booking.findUniqueOrThrow({
         where: { id: existing.id },
-        data: { status: 'confirmed' },
+        select: {
+          id: true,
+          reference: true,
+          status: true,
+          price: true,
+          requestedAt: true,
+          decisionDeadline: true,
+        },
       });
+
+      await this.appendBookingEvent(tx, updated.id, userId, 'passenger', {
+        type: 'requested',
+        fromStatus: 'held',
+        toStatus: 'requested',
+        metadata: { decisionDeadline: decisionDeadline.toISOString() },
+      });
+
+      return { ...updated, duplicate: false };
     });
 
+    // The hold key is no longer required once the request is persisted.
     try {
       await this.redis.del(`hold:${slotId}`);
     } catch (error) {
       const errorType = error instanceof Error ? error.name : 'UnknownError';
       this.logger.warn(
-        `Confirmed booking ${booking.id}; Redis hold-key cleanup failed (${errorType}). The key will expire by TTL.`,
+        `Request ${booking.id} persisted; Redis hold-key cleanup failed (${errorType}). The key will expire by TTL.`,
       );
     }
 
@@ -363,40 +464,113 @@ export class BookingsService {
       bookingId: booking.id,
       reference: booking.reference,
       slotId,
-      status: 'confirmed',
+      status: booking.status,
+      requestedAt: booking.requestedAt,
+      decisionDeadline: booking.decisionDeadline,
+      price: Number(booking.price),
+      duplicate: booking.duplicate,
     };
   }
 
-  // ...inside the BookingsService class, alongside holdSlot/confirmSlot:
+  /**
+   * @deprecated Use {@link requestSlot}. Kept for one release; the old behavior
+   * of transitioning a held booking directly to `confirmed` is no longer valid.
+   */
+  async confirmSlot(slotId: string, userId: string) {
+    return this.requestSlot(slotId, userId);
+  }
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async releaseExpiredHolds() {
-    // Find slots stuck in 'held' status
-    const heldSlots = await this.prisma.availabilitySlot.findMany({
-      where: { status: 'held' },
-      select: { id: true },
+    await this.releaseExpiredTemporaryHolds();
+    await this.expireOverdueRequests();
+  }
+
+  /** Releases 5-minute holds whose Redis key has disappeared. */
+  async releaseExpiredTemporaryHolds(batchSize = EXPIRY_BATCH_SIZE) {
+    const heldBookings = await this.prisma.booking.findMany({
+      where: { status: 'held', slot: { status: 'held' } },
+      select: { id: true, slotId: true },
+      orderBy: { createdAt: 'asc' },
+      take: batchSize,
     });
 
-    for (const slot of heldSlots) {
-      const stillHeld = await this.redis.exists(`hold:${slot.id}`);
-      if (!stillHeld) {
-        const released = await this.prisma.$transaction(async (tx) => {
-          const released = await tx.availabilitySlot.updateMany({
-            where: { id: slot.id, status: 'held' },
-            data: { status: 'available' },
-          });
-          if (released.count === 0) return false;
+    for (const booking of heldBookings) {
+      const stillHeld = await this.redis.exists(`hold:${booking.slotId}`);
+      if (stillHeld) continue;
 
-          await tx.booking.updateMany({
-            where: { slotId: slot.id, status: 'held' },
-            data: { status: 'cancelled' },
-          });
-          return true;
+      const released = await this.prisma.$transaction(async (tx) => {
+        const transitioned = await tx.booking.updateMany({
+          where: { id: booking.id, status: 'held' },
+          data: { status: 'cancelled', cancelledAt: new Date() },
         });
-        if (released) {
-          console.log(`Released expired hold on slot ${slot.id}`);
+        if (transitioned.count === 0) return false;
+
+        const slot = await tx.availabilitySlot.updateMany({
+          where: { id: booking.slotId, status: 'held' },
+          data: { status: 'available' },
+        });
+        if (slot.count === 0) {
+          throw new ConflictException('Slot state changed during hold expiry');
         }
+
+        await this.appendBookingEvent(tx, booking.id, null, 'system', {
+          type: 'hold_expired',
+          fromStatus: 'held',
+          toStatus: 'cancelled',
+        });
+
+        return true;
+      });
+
+      if (released) {
+        this.logger.log(`Released expired hold on slot ${booking.slotId}`);
       }
+    }
+  }
+
+  /**
+   * Expires booking requests whose 24-hour operator response deadline passed.
+   * The deadline write predicate is authoritative; this sweeper only applies it.
+   */
+  async expireOverdueRequests(batchSize = EXPIRY_BATCH_SIZE) {
+    const now = new Date();
+    const overdue = await this.prisma.booking.findMany({
+      where: { status: 'requested', decisionDeadline: { lte: now } },
+      select: { id: true, slotId: true },
+      orderBy: { decisionDeadline: 'asc' },
+      take: batchSize,
+    });
+
+    for (const booking of overdue) {
+      await this.prisma.$transaction(async (tx) => {
+        const transitioned = await tx.booking.updateMany({
+          where: {
+            id: booking.id,
+            status: 'requested',
+            decisionDeadline: { lte: now },
+          },
+          data: { status: 'expired' },
+        });
+        if (transitioned.count === 0) return;
+
+        const slot = await tx.availabilitySlot.updateMany({
+          where: { id: booking.slotId, status: 'held' },
+          data: { status: 'available' },
+        });
+        if (slot.count === 0) {
+          throw new ConflictException(
+            'Slot state changed during request expiry',
+          );
+        }
+
+        await this.appendBookingEvent(tx, booking.id, null, 'system', {
+          type: 'expired',
+          fromStatus: 'requested',
+          toStatus: 'expired',
+          metadata: { decisionDeadline: now.toISOString() },
+        });
+      });
     }
   }
 }

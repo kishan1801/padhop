@@ -30,6 +30,8 @@ const booking = (
   status,
   price: 48000,
   createdAt: "2026-11-01T10:00:00.000Z",
+  requestedAt: null,
+  decisionDeadline: null,
   slot: {
     startTime,
     endTime,
@@ -118,6 +120,27 @@ describe("passenger bookings API", () => {
       result.past.map((item) => item.bookingId),
       ["cancelled-future", "completed-future", "past-confirmed"],
     );
+  });
+
+  it("treats an operator-pending request as an upcoming journey", () => {
+    const now = Date.parse("2026-11-13T12:00:00.000Z");
+    const items = [
+      booking(
+        "requested-upcoming",
+        "requested",
+        "2026-11-20T10:00:00Z",
+        "2026-11-20T11:00:00Z",
+      ),
+    ];
+
+    const result = partitionBookings(items, now);
+
+    assert.deepEqual(
+      result.upcoming.map((item) => item.bookingId),
+      ["requested-upcoming"],
+    );
+    assert.deepEqual(result.inProgress, []);
+    assert.deepEqual(result.past, []);
   });
 
   it("classifies a confirmed booking exactly at startTime as in progress", () => {
@@ -270,6 +293,8 @@ describe("fetchBookingById", () => {
     status: "confirmed",
     price: 48000,
     createdAt: "2026-11-12T10:00:00.000Z",
+    requestedAt: null,
+    decisionDeadline: null,
     slot: {
       startTime: "2026-11-20T10:00:00Z",
       endTime: "2026-11-20T11:00:00Z",
@@ -414,6 +439,8 @@ describe("hasDistinctDestination", () => {
       status: "confirmed",
       price: 48000,
       createdAt: "2026-11-01T10:00:00.000Z",
+  requestedAt: null,
+  decisionDeadline: null,
       slot: {
         startTime: "2026-11-20T10:00:00Z",
         endTime: "2026-11-20T11:00:00Z",

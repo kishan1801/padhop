@@ -1643,6 +1643,17 @@ html {
   gap: 0.75rem;
 }
 
+.journeyRequestMeta {
+  margin: 0.5rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.journeyRequestMeta strong {
+  color: var(--text-primary);
+}
+
 .journeyReference {
   display: flex;
   min-width: 0;

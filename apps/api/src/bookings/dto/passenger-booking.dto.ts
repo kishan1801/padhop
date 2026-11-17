@@ -18,6 +18,8 @@ export interface PassengerBookingDto {
   status: PassengerBookingStatus;
   price: number;
   createdAt: Date;
+  requestedAt: Date | null;
+  decisionDeadline: Date | null;
   slot: {
     startTime: Date;
     endTime: Date;
