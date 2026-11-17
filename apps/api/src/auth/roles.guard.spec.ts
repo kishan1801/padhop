@@ -67,6 +67,18 @@ describe('RolesGuard', () => {
     );
   });
 
+  it('rejects non-admin users attempting admin-only actions', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['admin']);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'operator',
+    });
+
+    await expect(guard.canActivate(mockContext('user-1'))).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
   it('throws ForbiddenException if the user does not exist', async () => {
     reflector.getAllAndOverride.mockReturnValue(['admin']);
     prisma.user.findUnique.mockResolvedValue(null);

@@ -39,7 +39,7 @@ export class AdminOperatorsController {
   @UseGuards(JwtOrSessionAuthGuard, RolesGuard, CsrfGuard, OriginGuard)
   @Roles('admin')
   @Post(':id/verify')
-  async verify(@Param('id') id: string) {
-    return this.operatorsService.verify(id);
+  async verify(@Param('id') id: string, @Request() req) {
+    return this.operatorsService.verify(id, req.user.userId);
   }
 }

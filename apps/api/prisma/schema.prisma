@@ -51,6 +51,7 @@ model User {
 
   operator Operator?
   bookings Booking[]
+  auditEvents AuditEvent[] @relation("AuditActor")
 
   @@map("users")
 }
@@ -162,4 +163,23 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  actorRole  String   @map("actor_role")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_events")
 }
