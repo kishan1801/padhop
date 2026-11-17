@@ -352,6 +352,12 @@ export default function BookingDetailPage({
             </p>
           )}
 
+          {booking.status === "declined" && booking.declineReason && (
+            <p className="journeyDeclineReason">
+              Operator reason: <strong>{booking.declineReason}</strong>
+            </p>
+          )}
+
           <section className="detailSection" aria-labelledby="aircraft-title">
             <h2 id="aircraft-title">Aircraft & Operator</h2>
             <div className="detailGrid">

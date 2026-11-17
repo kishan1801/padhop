@@ -244,6 +244,20 @@ body {
 
 .dashHeader > p:not(.eyebrow) { max-width: 570px; margin: .75rem auto 0; color: var(--text-secondary); line-height: 1.55; }
 .dashTrustNote { max-width: 570px; margin: .5rem auto 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
+.bookingSection { margin: 0 0 1.75rem; }
+.bookingSectionHeader { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .9rem; }
+.bookingSectionHeader h2 { margin: .1rem 0 .35rem; font: 600 1.35rem var(--font-display); }
+.bookingNotice { max-width: 52ch; margin: 0; color: var(--text-secondary); font-size: .82rem; line-height: 1.5; }
+.bookingControls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.bookingControls select { padding: .55rem .7rem; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--panel); color: var(--text-primary); font: inherit; }
+.bookingList { display: grid; gap: .85rem; }
+.bookingCard { display: grid; gap: .55rem; }
+.bookingCardHeader { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .5rem; }
+.bookingReference { margin: 0; color: var(--text-secondary); font-size: .75rem; letter-spacing: .04em; }
+.bookingPassenger { margin: .1rem 0 0; font-weight: 600; }
+.bookingRoute { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; margin: 0; color: var(--text-primary); font-size: .95rem; }
+.bookingMeta { display: flex; flex-wrap: wrap; gap: .35rem 1rem; color: var(--text-secondary); font-size: .82rem; }
+.bookingDeadline { color: var(--brass); font-weight: 600; }
 .helipadDisclaimer { max-width: 760px; margin: .75rem auto 0; color: var(--text-secondary); font-size: .78rem; line-height: 1.55; text-align: center; }
 .holdExplain { margin: .35rem 0 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; max-width: 46ch; }
 .statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin: 0 0 1.5rem; }
@@ -1651,6 +1665,20 @@ html {
 }
 
 .journeyRequestMeta strong {
+  color: var(--text-primary);
+}
+
+.journeyDeclineReason {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brass) 8%, var(--panel));
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.journeyDeclineReason strong {
   color: var(--text-primary);
 }
 

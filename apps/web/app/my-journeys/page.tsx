@@ -153,6 +153,12 @@ function JourneyCard({ booking }: { booking: PassengerBooking }) {
         </p>
       )}
 
+      {booking.status === "declined" && booking.declineReason && (
+        <p className="journeyDeclineReason">
+          Operator reason: <strong>{booking.declineReason}</strong>
+        </p>
+      )}
+
       <h3 className="journeyAircraft">
         <Plane size={18} aria-hidden="true" />
         <span className="journeyAircraftModel">{booking.slot.aircraft.model}</span>

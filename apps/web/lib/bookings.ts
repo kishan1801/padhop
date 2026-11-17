@@ -28,6 +28,7 @@ export type PassengerBooking = {
   createdAt: string;
   requestedAt: string | null;
   decisionDeadline: string | null;
+  declineReason: string | null;
   slot: {
     startTime: string;
     endTime: string;

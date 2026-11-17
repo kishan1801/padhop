@@ -20,6 +20,7 @@ export interface PassengerBookingDto {
   createdAt: Date;
   requestedAt: Date | null;
   decisionDeadline: Date | null;
+  declineReason: string | null;
   slot: {
     startTime: Date;
     endTime: Date;

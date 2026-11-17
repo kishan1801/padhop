@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Plane, Clock, Users, Plus, CalendarClock, CircleCheckBig, LayoutDashboard, ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,46 @@ type Aircraft = {
 };
 type Helipad = { id: string; name: string; city: string };
 
+type OperatorBooking = {
+  bookingId: string;
+  reference: string;
+  status: string;
+  price: number;
+  createdAt: string;
+  requestedAt: string | null;
+  decisionDeadline: string | null;
+  passengerName: string;
+  origin: Helipad;
+  destination: Helipad | null;
+  slot: { startTime: string; endTime: string };
+  aircraft: { model: string; registration: string | null; capacity: number };
+};
+
+type OperatorBookingPage = {
+  items: OperatorBooking[];
+  nextCursor: string | null;
+};
+
+const BOOKING_FILTERS = [
+  { value: "requested", label: "Requested" },
+  { value: "accepted", label: "Accepted" },
+  { value: "in_progress", label: "In progress" },
+  { value: "completed", label: "Completed" },
+  { value: "declined", label: "Declined" },
+  { value: "expired", label: "Expired" },
+  { value: "cancelled_by_passenger", label: "Cancelled by passenger" },
+  { value: "cancelled_by_operator", label: "Cancelled by operator" },
+  { value: "terminated_by_operator", label: "Terminated" },
+] as const;
+
+function bookingStatusLabel(status: string) {
+  if (status === "confirmed") return "Confirmed (legacy)";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function DashboardPage() {
   const { user, loading: authLoading, login, signup, logout } = useAuth();
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
@@ -35,6 +75,22 @@ export default function DashboardPage() {
   const [addingSlotFor, setAddingSlotFor] = useState<string | null>(null);
   const [slotOriginId, setSlotOriginId] = useState("");
   const [slotDestinationId, setSlotDestinationId] = useState("");
+  const [bookingFilter, setBookingFilter] = useState<string>("requested");
+  const [bookings, setBookings] = useState<OperatorBooking[]>([]);
+  const [bookingStatus, setBookingStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [bookingError, setBookingError] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
+  const [bookingsAccountKey, setBookingsAccountKey] = useState<string | null>(
+    null,
+  );
+  const bookingRequestSeq = useRef(0);
+  const bookingAccountKey = user ? `${user.id}:${user.role}` : "anonymous";
+  const visibleBookings =
+    bookingsAccountKey === bookingAccountKey ? bookings : [];
   const aircraftCount = fleet?.length ?? 0;
   const slotCount = fleet?.reduce((total, aircraft) => total + aircraft.slots.length, 0) ?? 0;
   const availableCount = fleet?.reduce(
@@ -71,6 +127,74 @@ export default function DashboardPage() {
       loadFleet();
     }
   }, [user, authLoading]);
+
+  function resetBookingState() {
+    bookingRequestSeq.current += 1;
+    setBookings([]);
+    setBookingsAccountKey(null);
+    setNextCursor(null);
+    setBookingStatus("idle");
+    setBookingError("");
+    setLoadingMore(false);
+  }
+
+  async function loadBookings(status = bookingFilter, append = false) {
+    const requestId = ++bookingRequestSeq.current;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setBookingStatus("loading");
+      setBookingError("");
+    }
+    try {
+      const params = new URLSearchParams({ status, limit: "20" });
+      if (append && nextCursor) params.set("cursor", nextCursor);
+      const page = await apiFetch<OperatorBookingPage>(
+        `/api/operator/bookings?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      if (requestId !== bookingRequestSeq.current) return;
+      setBookingsAccountKey(bookingAccountKey);
+      setBookings((current) =>
+        append ? [...current, ...page.items] : page.items,
+      );
+      setNextCursor(page.nextCursor);
+      setBookingStatus("ready");
+    } catch (error) {
+      if (requestId !== bookingRequestSeq.current) return;
+      const err = error as Error & { status?: number };
+      if (err.status === 403) {
+        setBookings([]);
+        setNextCursor(null);
+        setBookingStatus("ready");
+        return;
+      }
+      setBookingStatus("error");
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Could not load booking requests.",
+      );
+    } finally {
+      if (requestId === bookingRequestSeq.current) {
+        setLoadingMore(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    setBookingFilter("requested");
+  }, [bookingAccountKey]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    // Clear any previous account's bookings before new data can render.
+    resetBookingState();
+    if (user && user.role === "operator") {
+      void loadBookings(bookingFilter, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingAccountKey, authLoading, bookingFilter, bookingRefreshKey]);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,6 +292,8 @@ export default function DashboardPage() {
 
   async function handleLogout() {
     await logout();
+    resetBookingState();
+    setBookingFilter("requested");
     setFleet(null);
     setMessage("");
   }
@@ -225,6 +351,100 @@ export default function DashboardPage() {
           <div className="statCard"><CircleCheckBig size={18} /><span>{availableCount}</span><small>Available now</small></div>
           <div className="statCard"><LayoutDashboard size={18} /><span>{helipads.length}</span><small>Helipads</small></div>
         </section>
+        {user?.role === "operator" && (
+        <section className="bookingSection" aria-labelledby="booking-requests-title">
+          <div className="bookingSectionHeader">
+            <div>
+              <p className="sectionLabel">Coordination</p>
+              <h2 id="booking-requests-title">Booking Requests</h2>
+              <p className="bookingNotice">
+                Booking requests are awaiting operator review. Viewing a request
+                does not constitute acceptance or flight approval.
+              </p>
+            </div>
+            <div className="bookingControls">
+              <label className="srOnly" htmlFor="booking-filter">Booking status filter</label>
+              <select
+                id="booking-filter"
+                value={bookingFilter}
+                onChange={(event) => setBookingFilter(event.target.value)}
+              >
+                {BOOKING_FILTERS.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="searchButtonSecondary"
+                type="button"
+                onClick={() => setBookingRefreshKey((key) => key + 1)}
+                disabled={bookingStatus === "loading"}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {bookingStatus === "loading" && (
+            <p className="hint" role="status">Loading booking requests…</p>
+          )}
+          {bookingStatus === "error" && (
+            <p className="notice error" role="alert">{bookingError}</p>
+          )}
+          {bookingStatus === "ready" &&
+            bookingsAccountKey === bookingAccountKey &&
+            visibleBookings.length === 0 && (
+            <p className="hint">
+              No booking requests match this filter right now.
+            </p>
+          )}
+          <div className="bookingList">
+            {visibleBookings.map((booking) => (
+              <article key={booking.bookingId} className="dashCard bookingCard">
+                <div className="bookingCardHeader">
+                  <div>
+                    <p className="bookingReference">{booking.reference}</p>
+                    <p className="bookingPassenger">{booking.passengerName}</p>
+                  </div>
+                  <Badge variant={booking.status === "requested" ? "default" : "secondary"}>
+                    {bookingStatusLabel(booking.status)}
+                  </Badge>
+                </div>
+                <p className="bookingRoute">
+                  {booking.origin.name}
+                  <ArrowRight size={13} aria-hidden="true" />
+                  {booking.destination?.name ?? "No destination recorded"}
+                </p>
+                <div className="bookingMeta">
+                  <span>{booking.aircraft.model} · {booking.aircraft.registration ?? "Registration not listed"}</span>
+                  <span>
+                    {new Date(booking.slot.startTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                    {" – "}
+                    {new Date(booking.slot.endTime).toLocaleString([], { timeStyle: "short" })}
+                  </span>
+                  {booking.status === "requested" && booking.decisionDeadline && (
+                    <span className="bookingDeadline">
+                      Operator response by{" "}
+                      {new Date(booking.decisionDeadline).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                    </span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+          {nextCursor && bookingsAccountKey === bookingAccountKey && (
+            <button
+              className="searchButtonSecondary fullWidth"
+              type="button"
+              onClick={() => void loadBookings(bookingFilter, true)}
+              disabled={loadingMore}
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </section>
+        )}
         {message && <p className="notice">{message}</p>}
         {fleet && fleet.length === 0 && (
           <div className="dashCard emptyState">

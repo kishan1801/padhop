@@ -32,6 +32,7 @@ const booking = (
   createdAt: "2026-11-01T10:00:00.000Z",
   requestedAt: null,
   decisionDeadline: null,
+  declineReason: null,
   slot: {
     startTime,
     endTime,
@@ -295,6 +296,7 @@ describe("fetchBookingById", () => {
     createdAt: "2026-11-12T10:00:00.000Z",
     requestedAt: null,
     decisionDeadline: null,
+    declineReason: null,
     slot: {
       startTime: "2026-11-20T10:00:00Z",
       endTime: "2026-11-20T11:00:00Z",
@@ -441,6 +443,7 @@ describe("hasDistinctDestination", () => {
       createdAt: "2026-11-01T10:00:00.000Z",
   requestedAt: null,
   decisionDeadline: null,
+  declineReason: null,
       slot: {
         startTime: "2026-11-20T10:00:00Z",
         endTime: "2026-11-20T11:00:00Z",

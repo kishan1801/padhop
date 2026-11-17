@@ -197,6 +197,12 @@ export class BookingsService {
         createdAt: true,
         requestedAt: true,
         decisionDeadline: true,
+        events: {
+          where: { type: 'declined', reason: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { reason: true },
+        },
         slot: {
           select: {
             startTime: true,
@@ -226,6 +232,7 @@ export class BookingsService {
       createdAt: booking.createdAt,
       requestedAt: booking.requestedAt,
       decisionDeadline: booking.decisionDeadline,
+      declineReason: booking.events?.[0]?.reason ?? null,
       slot: {
         startTime: booking.slot.startTime,
         endTime: booking.slot.endTime,
@@ -255,6 +262,12 @@ export class BookingsService {
         createdAt: true,
         requestedAt: true,
         decisionDeadline: true,
+        events: {
+          where: { type: 'declined', reason: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { reason: true },
+        },
         slot: {
           select: {
             startTime: true,
@@ -288,6 +301,7 @@ export class BookingsService {
       createdAt: booking.createdAt,
       requestedAt: booking.requestedAt,
       decisionDeadline: booking.decisionDeadline,
+      declineReason: booking.events?.[0]?.reason ?? null,
       slot: {
         startTime: booking.slot.startTime,
         endTime: booking.slot.endTime,

@@ -15,6 +15,7 @@ import { PricingModule } from './pricing/pricing.module';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DemoModule } from './demo/demo.module';
+import { OperatorBookingsModule } from './operator-bookings/operator-bookings.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DemoModule } from './demo/demo.module';
     PricingModule,
     ChatModule,
     DemoModule,
+    OperatorBookingsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
