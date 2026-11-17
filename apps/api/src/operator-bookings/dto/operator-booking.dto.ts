@@ -46,3 +46,11 @@ export interface OperatorBookingListResponseDto {
   items: OperatorBookingListItemDto[];
   nextCursor: string | null;
 }
+
+export interface DeclineBookingRequestDto {
+  reason?: unknown;
+}
+
+export interface OperatorBookingDecisionDto extends OperatorBookingDetailDto {
+  idempotent: boolean;
+}

@@ -494,6 +494,179 @@ export class BookingsService {
     return this.requestSlot(slotId, userId);
   }
 
+  private normalizeDeclineReason(value: unknown): string {
+    if (typeof value !== 'string') {
+      throw new BadRequestException('A decline reason is required');
+    }
+    const normalized = value
+      .replace(/\r\n?|\n/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) {
+      throw new BadRequestException('A decline reason is required');
+    }
+    if (normalized.length > 500) {
+      throw new BadRequestException(
+        'Decline reason must be 500 characters or fewer',
+      );
+    }
+    return normalized;
+  }
+
+  async acceptRequest(bookingId: string, userId: string) {
+    return this.runDecision(bookingId, userId, 'accept');
+  }
+
+  async declineRequest(bookingId: string, userId: string, reason: unknown) {
+    const normalizedReason = this.normalizeDeclineReason(reason);
+    return this.runDecision(bookingId, userId, 'decline', normalizedReason);
+  }
+
+  /**
+   * Conditional operator decision. HTTP exceptions that must be returned after
+   * a lazy-expiry commit are derived by the caller from the returned outcome;
+   * only rollback-worthy failures throw inside the transaction.
+   */
+  private async runDecision(
+    bookingId: string,
+    userId: string,
+    action: 'accept' | 'decline',
+    reason?: string,
+  ) {
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const operator = await tx.operator.findUnique({
+        where: { userId },
+        select: { id: true, verified: true },
+      });
+      if (!operator || !operator.verified) {
+        return { kind: 'forbidden' as const };
+      }
+
+      const claimed = await tx.booking.updateMany({
+        where: {
+          id: bookingId,
+          status: 'requested',
+          decisionDeadline: { gt: now },
+          slot: { aircraft: { operatorId: operator.id } },
+        },
+        data:
+          action === 'accept'
+            ? { status: 'accepted', acceptedAt: now }
+            : { status: 'declined', declinedAt: now },
+      });
+
+      if (claimed.count === 1) {
+        if (action === 'decline') {
+          const row = await tx.booking.findUniqueOrThrow({
+            where: { id: bookingId },
+            select: { slotId: true },
+          });
+          const slot = await tx.availabilitySlot.updateMany({
+            where: { id: row.slotId, status: 'held' },
+            data: { status: 'available' },
+          });
+          if (slot.count !== 1) {
+            throw new ConflictException(
+              'Slot is no longer held for this booking',
+            );
+          }
+        }
+
+        await this.appendBookingEvent(
+          tx,
+          bookingId,
+          userId,
+          'operator',
+          action === 'accept'
+            ? {
+                type: 'accepted',
+                fromStatus: 'requested',
+                toStatus: 'accepted',
+              }
+            : {
+                type: 'declined',
+                fromStatus: 'requested',
+                toStatus: 'declined',
+                reason: reason ?? null,
+              },
+        );
+
+        return {
+          kind: 'decided' as const,
+          bookingId,
+          idempotent: false,
+        };
+      }
+
+      const existing = await tx.booking.findFirst({
+        where: {
+          id: bookingId,
+          slot: { aircraft: { operatorId: operator.id } },
+        },
+        select: { id: true, status: true, decisionDeadline: true },
+      });
+      if (!existing) {
+        return { kind: 'not-found' as const };
+      }
+
+      if (
+        existing.status === 'requested' &&
+        existing.decisionDeadline &&
+        existing.decisionDeadline.getTime() <= now.getTime()
+      ) {
+        const expired = await tx.booking.updateMany({
+          where: {
+            id: bookingId,
+            status: 'requested',
+            decisionDeadline: { lte: now },
+          },
+          data: { status: 'expired' },
+        });
+        if (expired.count === 1) {
+          const row = await tx.booking.findUniqueOrThrow({
+            where: { id: bookingId },
+            select: { slotId: true },
+          });
+          const slot = await tx.availabilitySlot.updateMany({
+            where: { id: row.slotId, status: 'held' },
+            data: { status: 'available' },
+          });
+          if (slot.count !== 1) {
+            throw new ConflictException(
+              'Slot state changed during request expiry',
+            );
+          }
+          await this.appendBookingEvent(tx, bookingId, null, 'system', {
+            type: 'expired',
+            fromStatus: 'requested',
+            toStatus: 'expired',
+            metadata: { decisionDeadline: now.toISOString() },
+          });
+        }
+        return { kind: 'expired' as const, bookingId };
+      }
+
+      if (action === 'accept' && existing.status === 'accepted') {
+        return {
+          kind: 'decided' as const,
+          bookingId,
+          idempotent: true,
+        };
+      }
+      if (action === 'decline' && existing.status === 'declined') {
+        return {
+          kind: 'decided' as const,
+          bookingId,
+          idempotent: true,
+        };
+      }
+
+      return { kind: 'conflict' as const, bookingId };
+    });
+  }
+
   @Cron(CronExpression.EVERY_30_SECONDS)
   async releaseExpiredHolds() {
     await this.releaseExpiredTemporaryHolds();

@@ -8,5 +8,6 @@ import { AuthModule } from '../auth/auth.module';
   imports: [PricingModule, AuthModule],
   controllers: [BookingsController],
   providers: [BookingsService],
+  exports: [BookingsService],
 })
 export class BookingsModule {}
