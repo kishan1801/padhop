@@ -206,7 +206,7 @@ function ResultCard({
           </p>
         </div>
         <Badge variant={helipad.available_slots > 0 ? "default" : "secondary"} className={helipad.available_slots > 0 ? "pulse-badge" : ""}>
-          {helipad.available_slots} {helipad.available_slots === 1 ? "charter" : "charters"}
+              {helipad.available_slots} {helipad.available_slots === 1 ? "slot" : "slots"}
         </Badge>
       </div>
       <button className="searchButtonSecondary fullWidth magnetic" onClick={() => onSelect(helipad.id)}>
@@ -754,7 +754,7 @@ export default function SearchPage() {
       setNoticeKind("success");
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Could not confirm this charter.";
+        error instanceof Error ? error.message : "Could not confirm this booking record.";
       if (error instanceof ApiRequestError && error.status === 409) {
         setHeldBooking(null);
         setHoldSecondsRemaining(null);
@@ -955,6 +955,13 @@ export default function SearchPage() {
                 </div>
               )}
             </motion.div>
+
+            <p className="helipadDisclaimer">
+              Helipad listings are informational. A listing does not establish
+              ownership, regulatory approval, operational suitability or permission
+              to land. Operators and pilots remain responsible for verifying site
+              suitability and applicable permissions.
+            </p>
           </div>
         </section>
 
@@ -984,7 +991,7 @@ export default function SearchPage() {
         {heldBooking && (
           <section className="holdPanel" aria-label="Booking hold">
             <div>
-              <p className="eyebrow">Aircraft held</p>
+              <p className="eyebrow">Temporary hold</p>
               <h2><Plane size={18} /> {heldBooking.slot.aircraft.model}</h2>
               {heldBooking.route && (
                 <p className="holdRoute">
@@ -1009,9 +1016,13 @@ export default function SearchPage() {
                 quote):{" "}
                 <strong>{holdPriceFormatter.format(heldBooking.price)}</strong>
               </p>
+              <p className="holdExplain">
+                Confirming records a booking in PadHop only. It does not
+                represent operator acceptance or flight approval.
+              </p>
             </div>
             <button className="searchButton" onClick={confirm} disabled={confirming}>
-              {confirming ? "Confirming…" : "Confirm charter"}
+              {confirming ? "Confirming…" : "Confirm booking record"}
             </button>
           </section>
         )}
@@ -1156,10 +1167,10 @@ export default function SearchPage() {
 
         <section id="results" className="results" aria-live="polite">
           {status === "idle" && (
-            <p className="hint">Search near you, or try Bengaluru to see live demo availability.</p>
+            <p className="hint">Search near you, or try Bengaluru to see sample availability.</p>
           )}
           {status === "done" && results.length === 0 && (
-            <p className="hint">No charters are available nearby right now. Try a wider search radius.</p>
+            <p className="hint">No availability is listed nearby right now. Try a wider search radius.</p>
           )}
           {status === "done" && results.length > 0 && (
             <p className="hint charterCount">

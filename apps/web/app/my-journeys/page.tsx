@@ -145,7 +145,7 @@ function JourneyCard({ booking }: { booking: PassengerBooking }) {
         <div className="journeyDetail">
           <div className="journeyPriceMark" aria-hidden="true">₹</div>
           <div>
-            <span>Charter price</span>
+                  <span>Estimated price (PadHop estimate)</span>
             <strong>{priceFormatter.format(booking.price)}</strong>
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function MyJourneysPage() {
         <header className="journeysHeader">
           <p className="eyebrow">Your travel record</p>
           <h1>My Journeys</h1>
-          <p>Review your charter details and booking status in one place.</p>
+          <p>Review your journey details and booking status in one place.</p>
         </header>
 
         {needsAuthentication ? (
@@ -262,7 +262,7 @@ export default function MyJourneysPage() {
               </button>
             </form>
             <p className="journeysAuthHint">
-              New to PadHop? <Link href="/">Explore available charters</Link> to get started.
+              New to PadHop? <Link href="/">Explore available journeys</Link> to get started.
             </p>
           </section>
         ) : showLoading ? (
@@ -288,8 +288,8 @@ export default function MyJourneysPage() {
           <section className="journeysMessage journeysEmpty" aria-labelledby="journeys-empty-title">
             <div className="journeysEmptyIcon"><Plane size={22} aria-hidden="true" /></div>
             <h2 id="journeys-empty-title">No journeys yet</h2>
-            <p>Your bookings will appear here after you place a charter hold.</p>
-            <Link href="/#search" className="searchButton">Explore charters</Link>
+          <p>Your bookings will appear here after you start a journey request.</p>
+          <Link href="/#search" className="searchButton">Explore journeys</Link>
           </section>
         ) : journeys ? (
           <div className="journeysSections">

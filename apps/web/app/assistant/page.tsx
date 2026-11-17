@@ -11,7 +11,7 @@ export default function AssistantPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hi! Ask me about helicopter charters near you — like \"what's available near Bengaluru right now?\"",
+      content: "Hi! Ask me about listed helipads and availability near you — like \"what's listed near Bengaluru right now?\"",
     },
   ]);
   const [input, setInput] = useState("");
@@ -50,9 +50,12 @@ export default function AssistantPage() {
   return (
     <AppShell><main className="dashPage assistantPage">
       <div className="dashHeader">
-        <p className="eyebrow">Flight concierge</p>
-        <h1>Plan with confidence</h1>
-        <p>Ask about nearby helipads, current availability, or flight-weather conditions.</p>
+        <p className="eyebrow">Journey assistant</p>
+        <h1>Plan your journey</h1>
+        <p>
+          Ask about listed helipads and operator-declared availability. Weather
+          information is advisory only and is not flight clearance.
+        </p>
       </div>
 
       <div className="chatWindow">
@@ -81,7 +84,7 @@ export default function AssistantPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="e.g. What's available near Bengaluru right now?"
+          placeholder="e.g. What's listed near Bengaluru right now?"
           disabled={loading}
         />
         <button type="submit" disabled={loading || !input.trim()} aria-label="Send">

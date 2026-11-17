@@ -243,6 +243,9 @@ body {
 }
 
 .dashHeader > p:not(.eyebrow) { max-width: 570px; margin: .75rem auto 0; color: var(--text-secondary); line-height: 1.55; }
+.dashTrustNote { max-width: 570px; margin: .5rem auto 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
+.helipadDisclaimer { max-width: 760px; margin: .75rem auto 0; color: var(--text-secondary); font-size: .78rem; line-height: 1.55; text-align: center; }
+.holdExplain { margin: .35rem 0 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; max-width: 46ch; }
 .statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin: 0 0 1.5rem; }
 .statCard { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: .1rem .55rem; padding: 1rem; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel); }
 .statCard svg { grid-row: span 2; color: var(--brass); margin-top: .15rem; }.statCard span { font: 700 1.3rem/1 var(--font-display); }.statCard small { color: var(--text-secondary); font-size: .75rem; }

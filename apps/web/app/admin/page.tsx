@@ -56,7 +56,7 @@ export default function AdminPage() {
       await apiFetch(`/api/admin/operators/${operatorId}/verify`, {
         method: "POST",
       });
-      setMessage("Operator verified.");
+      setMessage("Platform review recorded.");
       await loadPending();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not verify this operator.");
@@ -104,7 +104,11 @@ export default function AdminPage() {
         <div className="dashHeader">
           <p className="eyebrow">Administration</p>
           <h1>Operator verification queue</h1>
-          <p>Review and activate operator accounts before they publish aircraft availability.</p>
+          <p>
+            Complete PadHop&apos;s platform review for operator companies. This is
+            not regulatory certification or approval of aircraft, pilots or
+            landing sites.
+          </p>
         </div>
 
         {message && <p className="notice">{message}</p>}
@@ -132,7 +136,7 @@ export default function AdminPage() {
                 </div>
               </div>
               <button className="searchButton fullWidth" onClick={() => verify(op.id)}>
-                <ShieldCheck size={16} /> Verify operator
+                <ShieldCheck size={16} /> Record platform review
               </button>
             </div>
           ))}

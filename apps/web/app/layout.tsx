@@ -16,8 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "PadHop — Helicopter charters, on demand",
-  description: "Search nearby helipads and book a helicopter charter in India, now or in advance.",
+  title: "PadHop — Aerial journey coordination",
+  description:
+    "Discover listed helipads and coordinate helicopter journeys with licensed operators in India.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

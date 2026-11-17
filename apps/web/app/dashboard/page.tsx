@@ -101,7 +101,7 @@ export default function DashboardPage() {
         method: "POST",
         body: JSON.stringify({ companyName: String(form.get("companyName")) }),
       });
-      setMessage("Operator account created. Awaiting admin verification before you can add aircraft.");
+      setMessage("Operator account created. Awaiting PadHop platform review before you can add aircraft.");
       await loadFleet();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not register as an operator.");
@@ -214,6 +214,10 @@ export default function DashboardPage() {
           <p className="eyebrow">Operator control center</p>
           <h1>Your fleet, at a glance</h1>
           <p>Manage aircraft availability and keep your schedule ready for booking.</p>
+          <p className="dashTrustNote">
+            Aircraft registration is an identifier only. It is not proof of
+            airworthiness, insurance or operational approval.
+          </p>
         </div>
         <section className="statGrid" aria-label="Fleet summary">
           <div className="statCard"><Plane size={18} /><span>{aircraftCount}</span><small>Aircraft</small></div>
@@ -228,7 +232,7 @@ export default function DashboardPage() {
             <div>
               <p className="sectionLabel">Start operating</p>
               <h2>Register your operator account</h2>
-              <p>Once an administrator verifies your company, you can add aircraft and publish availability.</p>
+              <p>Once an administrator completes PadHop&apos;s platform review of your company, you can add aircraft and publish availability. This is not regulatory certification.</p>
             </div>
             <form onSubmit={submitOnboard} className="inlineForm">
               <label className="srOnly" htmlFor="companyName">Company name</label>
