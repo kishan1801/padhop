@@ -477,6 +477,135 @@ html {
   outline-offset: 2px;
 }
 
+.routePanelWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: 760px;
+  margin-top: 1.25rem;
+}
+
+.routeEyebrow {
+  margin: 0;
+}
+
+.routePanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+}
+
+.routeSearchButton {
+  grid-column: 1 / -1;
+}
+
+.routePanelHint {
+  margin: 0;
+  color: #c3c8d4;
+  font-size: 0.85rem;
+}
+
+.routeErrorState {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.routeResults {
+  margin-top: 1.25rem;
+}
+
+.routeLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.routeHeadline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+}
+
+.routeHeadlineCities {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.routeSlotList {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.routeSlotCard {
+  padding: 1rem;
+}
+
+.routeOperator {
+  margin: 0.15rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.routeSlotMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.routeSlotMeta span {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.routeSlotActions {
+  display: flex;
+  margin-top: 0.85rem;
+}
+
+.routeSlotActions .searchButton {
+  flex: 1;
+}
+
+.holdRoute {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0;
+  color: var(--text-primary);
+}
+
+.holdRouteOperator {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.routeDisclaimer {
+  margin-top: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .routePanel {
+    grid-template-columns: 1fr;
+  }
+}
+
 .searchButton {
   background: var(--brass);
   color: var(--bg);
@@ -943,6 +1072,14 @@ html {
   flex-wrap: wrap;
   color: var(--text-primary);
   line-height: 1.4;
+}
+
+.slotRouteNote {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  text-align: left;
 }
 
 .spin {

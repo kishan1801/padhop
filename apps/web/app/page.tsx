@@ -8,7 +8,16 @@ import {
   useCallback,
   type CSSProperties,
 } from "react";
-import { MapPin, Plane, Clock, Users, Loader2, MessageCircle } from "lucide-react";
+import {
+  MapPin,
+  Plane,
+  Clock,
+  Users,
+  Loader2,
+  MessageCircle,
+  ArrowRight,
+  RotateCw,
+} from "lucide-react";
 import Image from "next/image";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +57,62 @@ type HeldBooking = {
   price: number;
   expiresAt: number;
   helipadId: string;
+  route?: {
+    origin: HelipadOption;
+    destination: HelipadOption;
+    operatorName: string | null;
+  } | null;
 };
+
+type PendingRouteHold = {
+  slot: RouteSlot;
+  route: {
+    origin: HelipadOption;
+    destination: HelipadOption;
+  };
+};
+
+type ConfirmedRouteSummary = {
+  reference: string;
+  aircraftModel: string;
+  origin: HelipadOption;
+  destination: HelipadOption;
+  operatorName: string | null;
+};
+
+type HelipadOption = {
+  id: string;
+  name: string;
+  city: string;
+};
+
+type RouteSlot = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  aircraft: {
+    model: string;
+    capacity: number;
+    registration: string | null;
+    operator: { companyName: string } | null;
+  };
+};
+
+type RouteSearchResult = {
+  origin: HelipadOption;
+  destination: HelipadOption;
+  slots: RouteSlot[];
+};
+
+const ROUTE_DISCLAIMER =
+  "Availability is declared by the operator. PadHop does not dispatch or guarantee flights. Final journey coordination and operational acceptance remain with the licensed operator.";
+
+function formatRouteTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Time unavailable"
+    : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
@@ -69,9 +133,6 @@ type ResultCardProps = {
   loadingSlots: boolean;
   slotLoadError: boolean;
   slots: Slot[];
-  onHold: (slot: Slot) => void;
-  holdingSlotId: string | null;
-  hasActiveHold: boolean;
   prefersReducedMotion: boolean;
 };
 
@@ -83,9 +144,6 @@ function ResultCard({
   loadingSlots,
   slotLoadError,
   slots,
-  onHold,
-  holdingSlotId,
-  hasActiveHold,
   prefersReducedMotion,
 }: ResultCardProps) {
   const [hasHoverSupport, setHasHoverSupport] = useState(false);
@@ -179,7 +237,8 @@ function ResultCard({
                   : "No aircraft are available at this helipad now."}
               </p>
             ) : (
-              slots.map((slot, si) => (
+              <>
+                {slots.map((slot, si) => (
                 <motion.div
                   key={slot.id}
                   className="slot"
@@ -196,22 +255,13 @@ function ResultCard({
                       <Users size={13} /> {slot.aircraft.capacity} seats
                     </span>
                   </div>
-                  <button
-                    className="searchButton magnetic"
-                    onClick={() => onHold(slot)}
-                    disabled={holdingSlotId !== null || hasActiveHold}
-                  >
-                    <span className="btnContent">
-                      {holdingSlotId === slot.id
-                        ? "Holding…"
-                        : hasActiveHold
-                          ? "Hold active"
-                          : "Hold charter"}
-                    </span>
-                    <span className="btnRipple" aria-hidden="true" />
-                  </button>
                 </motion.div>
-              ))
+                ))}
+                <p className="slotRouteNote">
+                  Nearby results show origin-only availability. Search a specific
+                  origin and destination above to request a journey.
+                </p>
+              </>
             )}
           </motion.div>
         ) : null}
@@ -221,7 +271,7 @@ function ResultCard({
 }
 
 export default function SearchPage() {
-  const { user, login, signup } = useAuth();
+  const { user, login, signup, refresh } = useAuth();
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const [noticeKind, setNoticeKind] = useState<"error" | "success" | null>(null);
@@ -231,7 +281,10 @@ export default function SearchPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotLoadError, setSlotLoadError] = useState(false);
-  const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
+  const [pendingRouteHold, setPendingRouteHold] =
+    useState<PendingRouteHold | null>(null);
+  const [lastConfirmation, setLastConfirmation] =
+    useState<ConfirmedRouteSummary | null>(null);
   const [heldBooking, setHeldBooking] = useState<HeldBooking | null>(null);
   const [holdSecondsRemaining, setHoldSecondsRemaining] = useState<number | null>(null);
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
@@ -247,18 +300,142 @@ export default function SearchPage() {
   const selectedHelipadRef = useRef<string | null>(null);
   const holdRequestGate = useRef(new HoldRequestGate());
 
+  const [helipadOptions, setHelipadOptions] = useState<HelipadOption[]>([]);
+  const [helipadStatus, setHelipadStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [originId, setOriginId] = useState("");
+  const [destinationId, setDestinationId] = useState("");
+  const [routeStatus, setRouteStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >("idle");
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [routeResult, setRouteResult] = useState<RouteSearchResult | null>(null);
+  const [lastRoute, setLastRoute] = useState<{
+    originId: string;
+    destinationId: string;
+  } | null>(null);
+  const routeRequests = useRef(new RequestSequence());
+  const routeAbortController = useRef<AbortController | null>(null);
+  const helipadAbortController = useRef<AbortController | null>(null);
+
+  const loadHelipads = useCallback(async () => {
+    helipadAbortController.current?.abort();
+    const controller = new AbortController();
+    helipadAbortController.current = controller;
+    setHelipadStatus("loading");
+    try {
+      const list = await apiFetch<HelipadOption[]>("/api/helipads", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      setHelipadOptions(list);
+      setHelipadStatus("ready");
+    } catch (error) {
+      if (isAbortError(error)) return;
+      setHelipadOptions([]);
+      setHelipadStatus("error");
+    }
+  }, []);
+
   useEffect(() => {
-    if (pendingSlot && !user) {
+    void loadHelipads();
+    return () => helipadAbortController.current?.abort();
+  }, [loadHelipads]);
+
+  const searchRoute = useCallback(
+    async (origin: string, destination: string) => {
+      const requestId = routeRequests.current.next();
+      routeAbortController.current?.abort();
+      const controller = new AbortController();
+      routeAbortController.current = controller;
+      setLastRoute({ originId: origin, destinationId: destination });
+      setRouteStatus("loading");
+      setRouteError(null);
+      try {
+        const params = new URLSearchParams({
+          originId: origin,
+          destinationId: destination,
+        });
+        const result = await apiFetch<RouteSearchResult>(
+          `/api/helipads/search?${params.toString()}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        if (!routeRequests.current.isCurrent(requestId)) return;
+        setRouteResult(result);
+        setRouteStatus("done");
+      } catch (error) {
+        if (!routeRequests.current.isCurrent(requestId) || isAbortError(error)) {
+          return;
+        }
+        setRouteResult(null);
+        setRouteStatus("error");
+        if (error instanceof ApiRequestError && error.status === 404) {
+          setRouteError(
+            "One of the selected helipads is no longer available. The helipad list has been refreshed.",
+          );
+          void loadHelipads();
+        } else {
+          setRouteError(
+            error instanceof Error
+              ? error.message
+              : "Could not search availability for this route.",
+          );
+        }
+      } finally {
+        if (
+          routeRequests.current.isCurrent(requestId) &&
+          routeAbortController.current === controller
+        ) {
+          routeAbortController.current = null;
+        }
+      }
+    },
+    [loadHelipads],
+  );
+
+  function submitRouteSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (routeStatus === "loading") return;
+    if (!originId || !destinationId) {
+      setRouteStatus("error");
+      setRouteError("Select both an origin and a destination helipad.");
+      return;
+    }
+    if (originId === destinationId) {
+      setRouteStatus("error");
+      setRouteError("Origin and destination must be different helipads.");
+      return;
+    }
+    void searchRoute(originId, destinationId);
+  }
+
+  function retryRouteSearch() {
+    if (!lastRoute || routeStatus === "loading") return;
+    void searchRoute(lastRoute.originId, lastRoute.destinationId);
+  }
+
+  const destinationOptions = helipadOptions.filter(
+    (helipad) => helipad.id !== originId,
+  );
+  const routeFormInvalid =
+    !originId || !destinationId || originId === destinationId;
+
+  useEffect(() => {
+    if (pendingRouteHold && !user) {
       authPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [pendingSlot, user]);
+  }, [pendingRouteHold, user]);
 
   useEffect(
     () => () => {
       searchRequests.current.next();
       slotRequests.current.next();
+      routeRequests.current.next();
       searchAbortController.current?.abort();
       slotAbortController.current?.abort();
+      routeAbortController.current?.abort();
+      helipadAbortController.current?.abort();
     },
     [],
   );
@@ -393,6 +570,16 @@ export default function SearchPage() {
       setHoldSecondsRemaining(null);
       setMessage(expiryMessage);
       setNoticeKind("error");
+      if (booking.route) {
+        void searchRoute(
+          booking.route.origin.id,
+          booking.route.destination.id,
+        ).finally(() => {
+          setMessage(expiryMessage);
+          setNoticeKind("error");
+        });
+        return;
+      }
       if (
         booking.helipadId &&
         selectedHelipadRef.current === booking.helipadId
@@ -403,7 +590,7 @@ export default function SearchPage() {
         });
       }
     },
-    [showSlots],
+    [showSlots, searchRoute],
   );
 
   useEffect(() => {
@@ -421,27 +608,35 @@ export default function SearchPage() {
     return () => window.clearInterval(interval);
   }, [heldBooking, expireHeldBooking]);
 
-  async function hold(slot: Slot) {
+  async function holdRoute(
+    slot: RouteSlot,
+    route: { origin: HelipadOption; destination: HelipadOption },
+  ) {
     if (!user) {
-      setPendingSlot(slot);
+      setPendingRouteHold({ slot, route });
       return;
     }
     if (heldBooking !== null) return;
 
-    const heldHelipadId = selectedHelipadRef.current ?? "";
     const requestedAt = Date.now();
     await runGuardedHold({
       gate: holdRequestGate.current,
       slotId: slot.id,
       onStart: () => {
         setHoldingSlotId(slot.id);
+        setLastConfirmation(null);
         clearNotice();
       },
       request: async () => {
-        const response = await apiFetch<HoldResponse>(`/api/bookings/hold/${slot.id}`, {
-          method: "POST",
-          body: "{}",
-        });
+        const response = await apiFetch<HoldResponse>(
+          `/api/bookings/hold/${slot.id}`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              destinationHelipadId: route.destination.id,
+            }),
+          },
+        );
         if (
           !response.bookingId ||
           !Number.isFinite(response.price) ||
@@ -453,17 +648,10 @@ export default function SearchPage() {
         }
         const expiresAt = requestedAt + response.expiresInSeconds * 1000;
         if (expiresAt <= Date.now()) {
-          const expiryMessage =
-            "This hold has already expired. Please select another flight.";
-          if (
-            heldHelipadId &&
-            selectedHelipadRef.current === heldHelipadId
-          ) {
-            void showSlots(heldHelipadId, true).finally(() =>
-              showError(expiryMessage),
-            );
-          }
-          throw new Error(expiryMessage);
+          void searchRoute(route.origin.id, route.destination.id);
+          throw new Error(
+            "This hold has already expired. Please select another flight.",
+          );
         }
         return { response, expiresAt };
       },
@@ -474,33 +662,35 @@ export default function SearchPage() {
           slot,
           price: response.price,
           expiresAt,
-          helipadId: heldHelipadId,
+          helipadId: route.origin.id,
+          route: {
+            origin: route.origin,
+            destination: route.destination,
+            operatorName: slot.aircraft.operator?.companyName ?? null,
+          },
         });
         setHoldSecondsRemaining(getHoldSecondsRemaining(expiresAt));
-        setPendingSlot(null);
+        setPendingRouteHold(null);
       },
       onUnavailable: () => {
-        const unavailableMessage =
-          "This flight is no longer available. Please refresh availability and choose another flight.";
-        showError(unavailableMessage);
-        if (
-          heldHelipadId &&
-          selectedHelipadRef.current === heldHelipadId
-        ) {
-          void showSlots(heldHelipadId, true).finally(() =>
-            showError(unavailableMessage),
-          );
-        }
+        showError(
+          "This flight is no longer available. Availability for this route has been refreshed.",
+        );
+        void searchRoute(route.origin.id, route.destination.id);
       },
       onError: (error) => {
+        if (error instanceof ApiRequestError && error.status === 401) {
+          setPendingRouteHold({ slot, route });
+          showError("Your session expired. Sign in again to hold this route.");
+          void refresh();
+          return;
+        }
         showError(
-          error instanceof Error ? error.message : "Could not hold this charter.",
+          error instanceof Error ? error.message : "Could not hold this route.",
         );
       },
       onFinally: () => {
-        setHoldingSlotId((current) =>
-          current === slot.id ? null : current,
-        );
+        setHoldingSlotId((current) => (current === slot.id ? null : current));
       },
     });
   }
@@ -520,7 +710,9 @@ export default function SearchPage() {
       } else {
         await login(String(form.get("email")), String(form.get("password")));
       }
-      if (pendingSlot) await hold(pendingSlot);
+      if (pendingRouteHold) {
+        await holdRoute(pendingRouteHold.slot, pendingRouteHold.route);
+      }
     } catch (error) {
       showError(error instanceof Error ? error.message : "Could not sign in.");
     } finally {
@@ -543,7 +735,19 @@ export default function SearchPage() {
       });
       setHeldBooking(null);
       setHoldSecondsRemaining(null);
-      if (selectedHelipadRef.current === heldBooking.helipadId) {
+      if (heldBooking.route) {
+        setLastConfirmation({
+          reference: heldBooking.reference,
+          aircraftModel: heldBooking.slot.aircraft.model,
+          origin: heldBooking.route.origin,
+          destination: heldBooking.route.destination,
+          operatorName: heldBooking.route.operatorName,
+        });
+        await searchRoute(
+          heldBooking.route.origin.id,
+          heldBooking.route.destination.id,
+        );
+      } else if (selectedHelipadRef.current === heldBooking.helipadId) {
         await showSlots(heldBooking.helipadId);
       }
       setMessage("Your booking is confirmed in PadHop. This does not indicate operator acceptance, payment, or flight approval.");
@@ -555,7 +759,12 @@ export default function SearchPage() {
         setHeldBooking(null);
         setHoldSecondsRemaining(null);
         showError(errorMessage);
-        if (selectedHelipadRef.current === heldBooking.helipadId) {
+        if (heldBooking.route) {
+          void searchRoute(
+            heldBooking.route.origin.id,
+            heldBooking.route.destination.id,
+          );
+        } else if (selectedHelipadRef.current === heldBooking.helipadId) {
           void showSlots(heldBooking.helipadId, true).finally(() =>
             showError(errorMessage),
           );
@@ -663,10 +872,93 @@ export default function SearchPage() {
                 <span className="btnRipple" aria-hidden="true" />
               </button>
             </motion.div>
+
+            <motion.div
+              id="route-search"
+              className="routePanelWrap"
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: prefersReducedMotion ? 0.01 : 0.5, ease: "easeOut", delay: prefersReducedMotion ? 0 : 0.4 }}
+            >
+              <p className="eyebrow routeEyebrow">Plan a route</p>
+              <form className="searchPanel routePanel" onSubmit={submitRouteSearch}>
+                <div className="field">
+                  <label htmlFor="route-origin">Origin helipad</label>
+                  <select
+                    id="route-origin"
+                    value={originId}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setOriginId(value);
+                      if (destinationId === value) setDestinationId("");
+                    }}
+                    disabled={helipadStatus !== "ready"}
+                  >
+                    <option value="">Select origin</option>
+                    {helipadOptions.map((helipad) => (
+                      <option key={helipad.id} value={helipad.id}>
+                        {helipad.name} · {helipad.city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="route-destination">Destination helipad</label>
+                  <select
+                    id="route-destination"
+                    value={destinationId}
+                    onChange={(event) => setDestinationId(event.target.value)}
+                    disabled={helipadStatus !== "ready" || !originId}
+                  >
+                    <option value="">Select destination</option>
+                    {destinationOptions.map((helipad) => (
+                      <option key={helipad.id} value={helipad.id}>
+                        {helipad.name} · {helipad.city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  className="searchButton magnetic routeSearchButton"
+                  type="submit"
+                  disabled={
+                    routeStatus === "loading" ||
+                    routeFormInvalid ||
+                    helipadStatus !== "ready"
+                  }
+                >
+                  <span className="btnContent">
+                    {routeStatus === "loading" ? (
+                      <>
+                        <Loader2 size={16} className="spin" /> Searching
+                      </>
+                    ) : (
+                      "Search route"
+                    )}
+                  </span>
+                  <span className="btnRipple" aria-hidden="true" />
+                </button>
+              </form>
+              {helipadStatus === "loading" && (
+                <p className="hint routePanelHint">Loading helipads…</p>
+              )}
+              {helipadStatus === "error" && (
+                <div className="routeErrorState" role="alert">
+                  <p className="hint error">Could not load helipads. Please try again.</p>
+                  <button
+                    className="searchButtonSecondary"
+                    type="button"
+                    onClick={() => void loadHelipads()}
+                  >
+                    <RotateCw size={14} aria-hidden="true" /> Retry
+                  </button>
+                </div>
+              )}
+            </motion.div>
           </div>
         </section>
 
-        {pendingSlot && !user && (
+        {pendingRouteHold && !user && (
           <section className="authPanel" ref={authPanelRef}>
             <p className="eyebrow">One last step</p>
             <h2>{authMode === "signup" ? "Create your passenger account" : "Welcome back"}</h2>
@@ -694,6 +986,17 @@ export default function SearchPage() {
             <div>
               <p className="eyebrow">Aircraft held</p>
               <h2><Plane size={18} /> {heldBooking.slot.aircraft.model}</h2>
+              {heldBooking.route && (
+                <p className="holdRoute">
+                  <MapPin size={14} aria-hidden="true" />
+                  <strong>{heldBooking.route.origin.name}</strong>
+                  <ArrowRight size={14} aria-hidden="true" />
+                  <strong>{heldBooking.route.destination.name}</strong>
+                  <span className="holdRouteOperator">
+                    · {heldBooking.route.operatorName ?? "Operator not listed"}
+                  </span>
+                </p>
+              )}
               <p>
                 This hold expires in{" "}
                 <span aria-live="off">
@@ -702,13 +1005,39 @@ export default function SearchPage() {
                 .
               </p>
               <p>
-                Estimated price:{" "}
-                {holdPriceFormatter.format(heldBooking.price)}
+                Estimated charter price (PadHop estimate, not an operator
+                quote):{" "}
+                <strong>{holdPriceFormatter.format(heldBooking.price)}</strong>
               </p>
             </div>
             <button className="searchButton" onClick={confirm} disabled={confirming}>
               {confirming ? "Confirming…" : "Confirm charter"}
             </button>
+          </section>
+        )}
+
+        {lastConfirmation && (
+          <section className="holdPanel" aria-label="Booking confirmation">
+            <div>
+              <p className="eyebrow">Journey requested</p>
+              <h2><Plane size={18} /> {lastConfirmation.aircraftModel}</h2>
+              <p className="holdRoute">
+                <MapPin size={14} aria-hidden="true" />
+                <strong>{lastConfirmation.origin.name}</strong>
+                <ArrowRight size={14} aria-hidden="true" />
+                <strong>{lastConfirmation.destination.name}</strong>
+                <span className="holdRouteOperator">
+                  · {lastConfirmation.operatorName ?? "Operator not listed"}
+                </span>
+              </p>
+              <p>
+                Booking reference: <code>{lastConfirmation.reference}</code>
+              </p>
+              <p>
+                This is a PadHop booking record. It does not indicate operator
+                acceptance, payment, or flight approval.
+              </p>
+            </div>
           </section>
         )}
 
@@ -720,6 +1049,110 @@ export default function SearchPage() {
             {message}
           </p>
         )}
+
+        <section id="route-results" className="results routeResults" aria-live="polite">
+          {routeStatus === "idle" && (
+            <p className="hint">
+              Select an origin and destination to see operator-declared availability.
+            </p>
+          )}
+          {routeStatus === "loading" && (
+            <p className="hint routeLoading">
+              <Loader2 size={16} className="spin" aria-hidden="true" /> Searching
+              operator availability for this route…
+            </p>
+          )}
+          {routeStatus === "error" && (
+            <div className="routeErrorState" role="alert">
+              <p className="hint error">{routeError}</p>
+              <button
+                className="searchButtonSecondary"
+                type="button"
+                onClick={retryRouteSearch}
+                disabled={!lastRoute}
+              >
+                <RotateCw size={14} aria-hidden="true" /> Retry
+              </button>
+            </div>
+          )}
+          {routeStatus === "done" && routeResult && (
+            <>
+              <p className="hint routeHeadline">
+                <strong>{routeResult.origin.name}</strong>
+                <ArrowRight size={14} aria-hidden="true" />
+                <strong>{routeResult.destination.name}</strong>
+                <span className="routeHeadlineCities">
+                  {routeResult.origin.city} to {routeResult.destination.city}
+                </span>
+              </p>
+              {routeResult.slots.length === 0 ? (
+                <p className="hint">
+                  No operator-declared availability for this route right now. Try a
+                  different route or check again later.
+                </p>
+              ) : (
+                <div className="routeSlotList">
+                  {routeResult.slots.map((routeSlot) => (
+                    <article key={routeSlot.id} className="card routeSlotCard">
+                      <div className="cardTop">
+                        <div className="cardIcon">
+                          <Plane size={20} />
+                        </div>
+                        <div className="cardMain">
+                          <h2>{routeSlot.aircraft.model}</h2>
+                          <p className="routeOperator">
+                            {routeSlot.aircraft.operator?.companyName ??
+                              "Operator not listed"}
+                          </p>
+                          <p className="cardCity">
+                            <MapPin size={13} /> {routeResult.origin.name} to{" "}
+                            {routeResult.destination.name}
+                          </p>
+                        </div>
+                        <Badge variant="default">Available</Badge>
+                      </div>
+                      <div className="routeSlotMeta">
+                        <span>
+                          <Clock size={13} />{" "}
+                          {formatRouteTime(routeSlot.startTime)} –{" "}
+                          {formatRouteTime(routeSlot.endTime)}
+                        </span>
+                        <span>
+                          <Users size={13} /> {routeSlot.aircraft.capacity} seats
+                        </span>
+                        {routeSlot.aircraft.registration && (
+                          <span>Registration: {routeSlot.aircraft.registration}</span>
+                        )}
+                      </div>
+                      <div className="routeSlotActions">
+                        <button
+                          className="searchButton magnetic"
+                          onClick={() =>
+                            holdRoute(routeSlot, {
+                              origin: routeResult.origin,
+                              destination: routeResult.destination,
+                            })
+                          }
+                          disabled={holdingSlotId !== null || heldBooking !== null}
+                        >
+                          <span className="btnContent">
+                            {holdingSlotId === routeSlot.id
+                              ? "Holding…"
+                              : heldBooking
+                                ? "Hold active"
+                                : "Hold this route"}
+                          </span>
+                          <span className="btnRipple" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <p className="routeDisclaimer">{ROUTE_DISCLAIMER}</p>
+            </>
+          )}
+        </section>
 
         <section id="results" className="results" aria-live="polite">
           {status === "idle" && (
@@ -753,9 +1186,6 @@ export default function SearchPage() {
               loadingSlots={loadingSlots}
               slotLoadError={slotLoadError}
               slots={slots}
-              onHold={hold}
-              holdingSlotId={holdingSlotId}
-              hasActiveHold={heldBooking !== null}
               prefersReducedMotion={prefersReducedMotion}
             />
           ))}
