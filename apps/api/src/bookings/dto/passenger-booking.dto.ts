@@ -1,5 +1,16 @@
 export type PassengerBookingStatus =
-  'held' | 'confirmed' | 'cancelled' | 'completed';
+  | 'held'
+  | 'requested'
+  | 'accepted'
+  | 'declined'
+  | 'expired'
+  | 'cancelled_by_passenger'
+  | 'cancelled_by_operator'
+  | 'terminated_by_operator'
+  | 'in_progress'
+  | 'completed'
+  | 'confirmed'
+  | 'cancelled';
 
 export interface PassengerBookingDto {
   bookingId: string;

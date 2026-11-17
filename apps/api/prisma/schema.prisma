@@ -24,6 +24,7 @@ enum SlotStatus {
   confirmed
   in_flight
   completed
+  terminated
   cancelled
   expired
 }
@@ -35,9 +36,32 @@ enum BookingType {
 
 enum BookingStatus {
   held
+  requested
+  accepted
+  declined
+  expired
+  cancelled_by_passenger
+  cancelled_by_operator
+  terminated_by_operator
+  in_progress
+  completed
   confirmed
   cancelled
+}
+
+enum BookingEventType {
+  held_created
+  requested
+  accepted
+  declined
+  expired
+  cancelled_by_passenger
+  cancelled_by_operator
+  cancellation_requested
+  started
   completed
+  terminated
+  hold_expired
 }
 
 model User {
@@ -131,12 +155,24 @@ model Booking {
   createdAt            DateTime      @default(now()) @map("created_at")
   reference            String        @unique @map("reference") @db.VarChar(20)
 
+  requestedAt        DateTime? @map("requested_at")
+  decisionDeadline   DateTime? @map("decision_deadline")
+  acceptedAt         DateTime? @map("accepted_at")
+  declinedAt         DateTime? @map("declined_at")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason")
+
   user               User             @relation(fields: [userId], references: [id])
   slot               AvailabilitySlot @relation(fields: [slotId], references: [id])
   destinationHelipad Helipad          @relation("destinationHelipad", fields: [destinationHelipadId], references: [id])
   payment            Payment?
+  events             BookingEvent[]
 
-  @@unique([slotId], where: raw("\"status\" IN ('held', 'confirmed')"), map: "bookings_active_slot_id_key")
+  @@index([userId, status])
+  @@index([status, decisionDeadline])
+  @@unique([slotId], where: raw("\"status\" IN ('held', 'requested', 'accepted', 'in_progress', 'confirmed')"), map: "bookings_active_slot_id_key")
   @@map("bookings")
 }
 
@@ -182,4 +218,22 @@ model AuditEvent {
   @@index([actorId, createdAt])
   @@index([action, createdAt])
   @@map("audit_events")
+}
+
+model BookingEvent {
+  id         String            @id @default(uuid())
+  bookingId  String            @map("booking_id")
+  actorId    String?           @map("actor_id")
+  actorRole  String            @map("actor_role")
+  type       BookingEventType
+  fromStatus BookingStatus?    @map("from_status")
+  toStatus   BookingStatus?    @map("to_status")
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
 }
