@@ -283,6 +283,12 @@ body {
 .dashCard { box-shadow: 0 10px 25px rgba(18, 35, 58, .04); }.aircraftCard, .approvalCard { animation: fadeUp .35s ease backwards; }.aircraftCard:hover, .approvalCard:hover { border-color: color-mix(in srgb, var(--brass) 50%, var(--panel-border)); }
 .emptyState { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1rem; }.emptyState .inlineForm { grid-column: 2; }.emptyState h2 { margin: 0 0 .4rem; font: 600 1.15rem var(--font-display); }.emptyState p:not(.sectionLabel) { color: var(--text-secondary); margin: 0; line-height: 1.5; }.sectionLabel { margin: 0 0 .3rem; color: var(--brass); font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }.emptyIcon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--brass) 14%, var(--panel)); color: var(--brass); }
 .addAircraftButton { margin-top: .25rem; }.approvalCard .dashCardTop { justify-content: space-between; }.emptyHint { border: 1px dashed var(--panel-border); border-radius: 14px; background: var(--panel); }
+.operatorStateBanner { margin: 0 0 1.1rem; padding: .9rem 1rem; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel); }
+.operatorStateBanner.pending { border-color: color-mix(in srgb, var(--brass) 45%, var(--panel-border)); background: color-mix(in srgb, var(--brass) 8%, var(--panel)); }
+.operatorStateBanner .sectionLabel { margin-bottom: .2rem; }
+.operatorStateText { max-width: 68ch; margin: 0; color: var(--text-secondary); font-size: .84rem; line-height: 1.55; }
+.emptyStateActions { display: flex; flex-wrap: wrap; gap: .5rem; grid-column: 2; }
+@media (max-width: 680px) { .emptyStateActions { grid-column: 1; } }
 .assistantPage .dashHeader { text-align: left; }.assistantPage .dashHeader > p:not(.eyebrow) { margin-left: 0; }.chatWindow { padding: 1.25rem; border: 1px solid var(--panel-border); border-radius: 16px; background: color-mix(in srgb, var(--panel) 85%, transparent); }.chatBubble { animation: fadeUp .2s ease both; }.chatInputForm { position: sticky; bottom: 0; background: var(--bg); }
 
 @media (max-width: 680px) {

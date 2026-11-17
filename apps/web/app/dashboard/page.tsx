@@ -51,7 +51,7 @@ function bookingStatusLabel(status: string) {
 }
 
 export default function DashboardPage() {
-  const { user, loading: authLoading, login, signup, logout } = useAuth();
+  const { user, loading: authLoading, authError, login, signup, logout, refresh: refreshAuth } = useAuth();
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [message, setMessage] = useState("");
   const [fleet, setFleet] = useState<Aircraft[] | null>(null);
@@ -102,6 +102,49 @@ export default function DashboardPage() {
     0,
   ) ?? 0;
 
+  // Verification state is derived on the server from the Operator record.
+  // The user role alone is never treated as proof of verification.
+  // Known limitation: this snapshot is only as fresh as the last /auth/me
+  // call. There is no polling in this milestone, so an operator verified by an
+  // administrator mid-session must refresh authentication or reload the
+  // dashboard to pick up the new verification state.
+  const hasOperatorProfile = Boolean(user?.hasOperatorProfile);
+  const operatorVerified = hasOperatorProfile && user?.isVerified === true;
+  const isPendingReview = hasOperatorProfile && !operatorVerified;
+  const canManage = operatorVerified;
+  const hasAircraft = aircraftCount > 0;
+  // The State C card must wait for the fleet request to settle so a verified
+  // operator with aircraft never flashes the "add your first aircraft" CTA.
+  const fleetReady = fleet !== null && !loadingFleet;
+  const operatorState: "A" | "B" | "C" | "D" = !hasOperatorProfile
+    ? "A"
+    : !operatorVerified
+      ? "B"
+      : hasAircraft
+        ? "D"
+        : "C";
+
+  const headerCopy =
+    operatorState === "A"
+      ? {
+          title: "Register your company to start operating",
+          body: "Create your operator profile so PadHop can review your company before you publish aircraft and availability.",
+        }
+      : operatorState === "B"
+        ? {
+            title: "Your operator profile is under review",
+            body: "PadHop is reviewing your company profile. You can preview your dashboard, but fleet and booking controls unlock after verification.",
+          }
+        : operatorState === "C"
+          ? {
+              title: "Verification complete",
+              body: "Your company is verified on PadHop. Register your first aircraft, then publish availability for passengers.",
+            }
+          : {
+              title: "Your fleet, at a glance",
+              body: "Manage aircraft availability and keep your schedule ready for booking.",
+            };
+
   async function loadFleet() {
     setLoadingFleet(true);
     setMessage("");
@@ -126,11 +169,11 @@ export default function DashboardPage() {
       .catch(() => {});
   }, []);
 
-  // Load fleet data when the authenticated operator identity is ready.
+  // Load fleet data only for accounts that hold an Operator record.
   useEffect(() => {
-    if (user && !authLoading) {
+    if (user && !authLoading && user.hasOperatorProfile) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      loadFleet();
+      void loadFleet();
     }
   }, [user, authLoading]);
 
@@ -202,6 +245,7 @@ export default function DashboardPage() {
     booking: OperatorBooking,
     type: "accept" | "decline",
   ) {
+    if (!canManage) return;
     if (decisionPending || decisionInFlight.current) return;
     setDecisionTarget({ bookingId: booking.bookingId, type });
     setDeclineReason("");
@@ -246,6 +290,7 @@ export default function DashboardPage() {
     booking: OperatorBooking,
     type: "accept" | "decline",
   ) {
+    if (!canManage) return;
     if (decisionInFlight.current || decisionPending) return;
 
     if (type === "decline") {
@@ -348,7 +393,7 @@ export default function DashboardPage() {
     // Clear any previous account's bookings before new data can render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     resetBookingState();
-    if (user && user.role === "operator") {
+    if (user && user.hasOperatorProfile) {
       void loadBookings(bookingFilter, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -384,7 +429,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ companyName: String(form.get("companyName")) }),
       });
       setMessage("Operator account created. Awaiting PadHop platform review before you can add aircraft.");
-      await loadFleet();
+      // Re-read the server-derived user so the dashboard switches to the
+      // pending-review state without a manual reload.
+      await refreshAuth();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not register as an operator.");
     }
@@ -393,6 +440,7 @@ export default function DashboardPage() {
   async function submitAircraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
+    if (!canManage) return;
     const form = new FormData(event.currentTarget);
     try {
       await apiFetch("/api/aircraft", {
@@ -413,6 +461,7 @@ export default function DashboardPage() {
   async function submitSlot(event: FormEvent<HTMLFormElement>, aircraftId: string) {
     event.preventDefault();
     if (!user) return;
+    if (!canManage) return;
     if (!slotOriginId || !slotDestinationId) {
       setMessage("Select both an origin and a destination helipad.");
       return;
@@ -485,6 +534,9 @@ export default function DashboardPage() {
               </button>
             </form>
             {message && <p className="notice error">{message}</p>}
+            {authError && (
+              <p className="notice error" role="alert">{authError}</p>
+            )}
           </div>
         </main>
       </AppShell>
@@ -496,29 +548,42 @@ export default function DashboardPage() {
       <main className="dashPage">
         <div className="dashHeader">
           <p className="eyebrow">Operator control center</p>
-          <h1>Your fleet, at a glance</h1>
-          <p>Manage aircraft availability and keep your schedule ready for booking.</p>
+          <h1>{headerCopy.title}</h1>
+          <p>{headerCopy.body}</p>
           <p className="dashTrustNote">
             Aircraft registration is an identifier only. It is not proof of
             airworthiness, insurance or operational approval.
           </p>
         </div>
+        {authError && (
+          <p className="notice error" role="alert">{authError}</p>
+        )}
+        {canManage && (
         <section className="statGrid" aria-label="Fleet summary">
           <div className="statCard"><Plane size={18} /><span>{aircraftCount}</span><small>Aircraft</small></div>
           <div className="statCard"><CalendarClock size={18} /><span>{slotCount}</span><small>Total slots</small></div>
           <div className="statCard"><CircleCheckBig size={18} /><span>{availableCount}</span><small>Available now</small></div>
           <div className="statCard"><LayoutDashboard size={18} /><span>{helipads.length}</span><small>Helipads</small></div>
         </section>
-        {user?.role === "operator" && (
+        )}
+        {hasOperatorProfile && (
         <section className="bookingSection" aria-labelledby="booking-requests-title">
           <div className="bookingSectionHeader">
             <div>
               <p className="sectionLabel">Coordination</p>
               <h2 id="booking-requests-title">Booking Requests</h2>
-              <p className="bookingNotice">
-                Booking requests are awaiting operator review. Viewing a request
-                does not constitute acceptance or flight approval.
-              </p>
+              {isPendingReview ? (
+                <p className="bookingNotice">
+                  Booking requests are visible for context only. Accept and
+                  decline controls unlock once PadHop completes your company
+                  review.
+                </p>
+              ) : (
+                <p className="bookingNotice">
+                  Booking requests are awaiting operator review. Viewing a
+                  request does not constitute acceptance or flight approval.
+                </p>
+              )}
             </div>
             <div className="bookingControls">
               <label className="srOnly" htmlFor="booking-filter">Booking status filter</label>
@@ -543,6 +608,18 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
+
+          {isPendingReview && (
+            <div className="operatorStateBanner pending" role="status">
+              <p className="sectionLabel">Pending review</p>
+              <p className="operatorStateText">
+                PadHop is reviewing your company profile. Platform review is not
+                regulatory certification and does not confirm airworthiness,
+                insurance or operational approval. Aircraft and availability
+                controls are disabled until review completes.
+              </p>
+            </div>
+          )}
 
           {decisionNotice && (
             <p className="decisionNotice" role="status">
@@ -600,7 +677,7 @@ export default function DashboardPage() {
                     </span>
                   )}
                 </div>
-                {booking.status === "requested" && (
+                {booking.status === "requested" && canManage && (
                   <>
                     <div className="bookingActions">
                       <button
@@ -764,13 +841,19 @@ export default function DashboardPage() {
         </section>
         )}
         {message && <p className="notice">{message}</p>}
-        {fleet && fleet.length === 0 && (
+
+        {operatorState === "A" && (
           <div className="dashCard emptyState">
             <span className="emptyIcon"><Plane size={22} /></span>
             <div>
               <p className="sectionLabel">Start operating</p>
               <h2>Register your operator account</h2>
-              <p>Once an administrator completes PadHop&apos;s platform review of your company, you can add aircraft and publish availability. This is not regulatory certification.</p>
+              <p>
+                Create your company profile for PadHop review. Once an
+                administrator verifies your company you can add aircraft and
+                publish availability. Platform review is not regulatory
+                certification.
+              </p>
             </div>
             <form onSubmit={submitOnboard} className="inlineForm">
               <label className="srOnly" htmlFor="companyName">Company name</label>
@@ -779,7 +862,32 @@ export default function DashboardPage() {
             </form>
           </div>
         )}
-        {loadingFleet && <p className="hint">Loading your fleet…</p>}
+
+        {operatorState === "C" && fleetReady && !showAddAircraft && (
+          <div className="dashCard emptyState">
+            <span className="emptyIcon"><CircleCheckBig size={22} /></span>
+            <div>
+              <p className="sectionLabel">Verified operator</p>
+              <h2>Add your first aircraft</h2>
+              <p>
+                Your company profile is verified. Register an aircraft to
+                publish availability and start receiving booking requests.
+              </p>
+            </div>
+            <div className="emptyStateActions">
+              <button
+                className="searchButton"
+                type="button"
+                onClick={() => setShowAddAircraft(true)}
+              >
+                <Plus size={16} /> Add aircraft
+              </button>
+            </div>
+          </div>
+        )}
+
+        {hasOperatorProfile && loadingFleet && <p className="hint">Loading your fleet…</p>}
+        {hasOperatorProfile && (
         <div className="fleetList">
           {fleet?.map((aircraft) => (
             <div key={aircraft.id} className="dashCard aircraftCard">
@@ -816,7 +924,7 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
-              {addingSlotFor === aircraft.id ? (
+              {canManage && (addingSlotFor === aircraft.id ? (
                 <form onSubmit={(event) => submitSlot(event, aircraft.id)} className="inlineForm">
                   <label className="srOnly" htmlFor={`origin-${aircraft.id}`}>Origin helipad</label>
                   <select
@@ -873,15 +981,12 @@ export default function DashboardPage() {
                 >
                   <Plus size={14} /> Add availability
                 </button>
-              )}
+              ))}
             </div>
           ))}
         </div>
-        {!showAddAircraft ? (
-          <button className="searchButton addAircraftButton" onClick={() => setShowAddAircraft(true)}>
-            <Plus size={16} /> Add aircraft
-          </button>
-        ) : (
+        )}
+        {canManage && (showAddAircraft ? (
           <form onSubmit={submitAircraft} className="dashCard inlineForm">
             <label className="srOnly" htmlFor="model">Aircraft model</label>
             <input id="model" name="model" required placeholder="Model (e.g. Bell 407)" />
@@ -891,7 +996,11 @@ export default function DashboardPage() {
             <input id="capacity" name="capacity" type="number" min={1} required placeholder="Seats" />
             <button className="searchButton">Save aircraft</button>
           </form>
-        )}
+        ) : operatorState === "D" ? (
+          <button className="searchButton addAircraftButton" onClick={() => setShowAddAircraft(true)}>
+            <Plus size={16} /> Add aircraft
+          </button>
+        ) : null)}
         <div className="dashAuthCard" style={{ marginTop: "2rem" }}>
           <button className="textButton" onClick={handleLogout}>
             Sign out

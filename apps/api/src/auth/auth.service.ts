@@ -33,7 +33,7 @@ export class AuthService {
     });
 
     await this.createSessionAndSetCookies(user.id, res);
-    return { user: this.toUserProfile(user) };
+    return { user: await this.toUserProfile(user) };
   }
 
   async login(email: string, password: string, res: Response) {
@@ -48,7 +48,7 @@ export class AuthService {
     }
 
     await this.createSessionAndSetCookies(user.id, res);
-    return { user: this.toUserProfile(user) };
+    return { user: await this.toUserProfile(user) };
   }
 
   async logout(sessionId: string, res: Response) {
@@ -65,7 +65,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
-    return { user: this.toUserProfile(user) };
+    return { user: await this.toUserProfile(user) };
   }
 
   async validateSession(tokenHash: string) {
@@ -201,7 +201,9 @@ export class AuthService {
       .update(rawCsrf)
       .digest('base64url');
     const csrfToken = `${rawCsrf}.${signature}`;
-    const expiresAt = new Date(Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+    );
     res.cookie('csrf_token', csrfToken, {
       httpOnly: false,
       secure: isProduction,
@@ -211,13 +213,27 @@ export class AuthService {
     });
   }
 
-  private toUserProfile(user: {
+  // Platform verification is derived from the Operator record, never from the
+  // user role. Users without an Operator record report no profile and are not
+  // verified.
+  private async toUserProfile(user: {
     id: string;
     name: string;
     email: string;
     role: string;
   }) {
-    return { id: user.id, name: user.name, email: user.email, role: user.role };
+    const operator = await this.prisma.operator.findUnique({
+      where: { userId: user.id },
+      select: { verified: true },
+    });
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      hasOperatorProfile: operator !== null,
+      isVerified: operator?.verified ?? false,
+    };
   }
 
   private buildToken(userId: string, email: string) {

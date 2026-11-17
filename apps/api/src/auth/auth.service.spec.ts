@@ -13,6 +13,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
     user: { findUnique: jest.Mock; create: jest.Mock };
+    operator: { findUnique: jest.Mock };
     session: {
       create: jest.Mock;
       findUnique: jest.Mock;
@@ -26,6 +27,7 @@ describe('AuthService', () => {
   beforeEach(async () => {
     prisma = {
       user: { findUnique: jest.fn(), create: jest.fn() },
+      operator: { findUnique: jest.fn().mockResolvedValue(null) },
       session: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -146,9 +148,64 @@ describe('AuthService', () => {
         email: 'user@padhop.test',
         name: 'Test User',
         role: 'passenger',
+        hasOperatorProfile: false,
+        isVerified: false,
       });
       expect(prisma.session.create).toHaveBeenCalled();
       expect(mockResponse.cookie).toHaveBeenCalled();
+    });
+  });
+
+  describe('getMe', () => {
+    it('reports no operator profile for a user without an Operator record', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'user@padhop.test',
+        name: 'Test User',
+        role: 'passenger',
+      });
+      prisma.operator.findUnique.mockResolvedValue(null);
+
+      const result = await service.getMe('user-1');
+
+      expect(result.user).toEqual({
+        id: 'user-1',
+        email: 'user@padhop.test',
+        name: 'Test User',
+        role: 'passenger',
+        hasOperatorProfile: false,
+        isVerified: false,
+      });
+    });
+
+    it('reports a verified operator from the Operator record, not the role', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'operator-user',
+        email: 'operator@padhop.test',
+        name: 'Operator',
+        role: 'operator',
+      });
+      prisma.operator.findUnique.mockResolvedValue({ verified: true });
+
+      const result = await service.getMe('operator-user');
+
+      expect(result.user.hasOperatorProfile).toBe(true);
+      expect(result.user.isVerified).toBe(true);
+    });
+
+    it('reports a pending operator when the Operator record is unverified', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'operator-user',
+        email: 'operator@padhop.test',
+        name: 'Operator',
+        role: 'operator',
+      });
+      prisma.operator.findUnique.mockResolvedValue({ verified: false });
+
+      const result = await service.getMe('operator-user');
+
+      expect(result.user.hasOperatorProfile).toBe(true);
+      expect(result.user.isVerified).toBe(false);
     });
   });
 });

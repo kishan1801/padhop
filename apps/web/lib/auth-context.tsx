@@ -13,11 +13,14 @@ export type User = {
   name: string;
   email: string;
   role: string;
+  hasOperatorProfile: boolean;
+  isVerified: boolean;
 };
 
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
+  authError: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -82,17 +85,23 @@ async function getCsrfToken(): Promise<string | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
       const data = await fetchJson<{ user: User }>("/api/auth/me");
       setUser(data.user);
+      setAuthError(null);
     } catch (error) {
-      const err = error as Error & { status: number };
+      const err = error as Error & { status?: number };
       if (err.status === 401) {
+        // Signed out is an expected state, not a failure.
         setUser(null);
+        setAuthError(null);
       } else {
-        throw error;
+        // Network, 403 and 5xx failures remain visible instead of being
+        // swallowed or turned into a logged-out state.
+        setAuthError(err.message || "Could not verify your session.");
       }
     } finally {
       setLoading(false);
@@ -101,13 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    const initAuth = async () => {
+    void (async () => {
       await getCsrfToken();
       if (mounted) {
         await refresh();
       }
-    };
-    initAuth();
+    })();
     return () => {
       mounted = false;
     };
@@ -152,10 +160,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers,
     });
     setUser(null);
+    setAuthError(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refresh }}>
+    <AuthContext.Provider
+      value={{ user, loading, authError, login, signup, logout, refresh }}
+    >
       {children}
     </AuthContext.Provider>
   );
