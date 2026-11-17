@@ -1,11 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plane, Clock, Users, Plus, CalendarClock, CircleCheckBig, LayoutDashboard, ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, ApiRequestError } from "@/lib/api-client";
+import {
+  acceptOperatorBooking,
+  declineOperatorBooking,
+  type OperatorBookingListItem as OperatorBooking,
+  type OperatorBookingListResponse as OperatorBookingPage,
+} from "@/lib/operator-bookings";
 
 type Slot = {
   id: string;
@@ -23,26 +29,6 @@ type Aircraft = {
   slots: Slot[];
 };
 type Helipad = { id: string; name: string; city: string };
-
-type OperatorBooking = {
-  bookingId: string;
-  reference: string;
-  status: string;
-  price: number;
-  createdAt: string;
-  requestedAt: string | null;
-  decisionDeadline: string | null;
-  passengerName: string;
-  origin: Helipad;
-  destination: Helipad | null;
-  slot: { startTime: string; endTime: string };
-  aircraft: { model: string; registration: string | null; capacity: number };
-};
-
-type OperatorBookingPage = {
-  items: OperatorBooking[];
-  nextCursor: string | null;
-};
 
 const BOOKING_FILTERS = [
   { value: "requested", label: "Requested" },
@@ -88,7 +74,25 @@ export default function DashboardPage() {
     null,
   );
   const bookingRequestSeq = useRef(0);
+  const decisionInFlight = useRef(false);
+  const decisionRequestSeq = useRef(0);
+  const [decisionTarget, setDecisionTarget] = useState<{
+    bookingId: string;
+    type: "accept" | "decline";
+  } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [decisionPending, setDecisionPending] = useState(false);
+  const [decisionError, setDecisionError] = useState<{
+    bookingId: string;
+    reference: string;
+    message: string;
+  } | null>(null);
+  const [decisionNotice, setDecisionNotice] = useState("");
   const bookingAccountKey = user ? `${user.id}:${user.role}` : "anonymous";
+  const bookingAccountKeyRef = useRef(bookingAccountKey);
+  useLayoutEffect(() => {
+    bookingAccountKeyRef.current = bookingAccountKey;
+  }, [bookingAccountKey]);
   const visibleBookings =
     bookingsAccountKey === bookingAccountKey ? bookings : [];
   const aircraftCount = fleet?.length ?? 0;
@@ -122,8 +126,10 @@ export default function DashboardPage() {
       .catch(() => {});
   }, []);
 
+  // Load fleet data when the authenticated operator identity is ready.
   useEffect(() => {
     if (user && !authLoading) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadFleet();
     }
   }, [user, authLoading]);
@@ -182,13 +188,165 @@ export default function DashboardPage() {
     }
   }
 
+  function resetDecisionState() {
+    decisionRequestSeq.current += 1;
+    decisionInFlight.current = false;
+    setDecisionTarget(null);
+    setDeclineReason("");
+    setDecisionPending(false);
+    setDecisionError(null);
+    setDecisionNotice("");
+  }
+
+  function openDecision(
+    booking: OperatorBooking,
+    type: "accept" | "decline",
+  ) {
+    if (decisionPending || decisionInFlight.current) return;
+    setDecisionTarget({ bookingId: booking.bookingId, type });
+    setDeclineReason("");
+    setDecisionError(null);
+    setDecisionNotice("");
+  }
+
+  function closeDecision() {
+    if (decisionPending) return;
+    setDecisionTarget(null);
+    setDecisionError(null);
+    setDeclineReason("");
+  }
+
+  function describeDecisionError(error: unknown, fallback: string) {
+    if (error instanceof ApiRequestError) {
+      if (error.status === 400) {
+        return error.message || "Enter a valid reason before declining.";
+      }
+      if (error.status === 401) {
+        return "Your session expired. Sign in again to continue.";
+      }
+      if (error.status === 403) {
+        return "You do not have permission to decide this request. Operator verification may still be pending.";
+      }
+      if (error.status === 404) {
+        return "This booking is no longer available.";
+      }
+      if (error.status === 409) {
+        return /deadline|expired/i.test(error.message)
+          ? "The 24-hour response deadline has passed."
+          : "This request is no longer awaiting a decision.";
+      }
+      if (error.status >= 500) {
+        return "PadHop could not complete this decision. Please try again.";
+      }
+    }
+    return fallback;
+  }
+
+  async function submitDecision(
+    booking: OperatorBooking,
+    type: "accept" | "decline",
+  ) {
+    if (decisionInFlight.current || decisionPending) return;
+
+    if (type === "decline") {
+      const normalized = declineReason
+        .replace(/\r\n?|\n/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!normalized) {
+        setDecisionError({
+          bookingId: booking.bookingId,
+          reference: booking.reference,
+          message: "Enter a reason for declining this request.",
+        });
+        return;
+      }
+      if (normalized.length > 500) {
+        setDecisionError({
+          bookingId: booking.bookingId,
+          reference: booking.reference,
+          message: "Decline reason must be 500 characters or fewer.",
+        });
+        return;
+      }
+    }
+
+    const startedAccountKey = bookingAccountKeyRef.current;
+    const requestId = ++decisionRequestSeq.current;
+    const ownsCurrentRequest = () =>
+      requestId === decisionRequestSeq.current &&
+      bookingAccountKeyRef.current === startedAccountKey;
+    decisionInFlight.current = true;
+    setDecisionPending(true);
+    setDecisionError(null);
+
+    try {
+      const result =
+        type === "accept"
+          ? await acceptOperatorBooking(booking.bookingId)
+          : await declineOperatorBooking(booking.bookingId, declineReason);
+
+      if (!ownsCurrentRequest()) return;
+
+      setDecisionTarget(null);
+      setDeclineReason("");
+      setDecisionError(null);
+      setDecisionNotice(
+        result.idempotent
+          ? type === "accept"
+            ? "This request was already accepted."
+            : "This request was already declined."
+          : type === "accept"
+            ? "Request accepted. This records operator acceptance in PadHop — it is not flight approval, dispatch authorization, or a guarantee the flight will operate."
+            : "Request declined. The passenger will see the reason you provided.",
+      );
+      setBookingRefreshKey((key) => key + 1);
+    } catch (error) {
+      if (!ownsCurrentRequest()) return;
+      setDecisionError({
+        bookingId: booking.bookingId,
+        reference: booking.reference,
+        message: describeDecisionError(
+          error,
+          "Could not complete this decision. Please try again.",
+        ),
+      });
+      if (
+        error instanceof ApiRequestError &&
+        (error.status === 404 || error.status === 409)
+      ) {
+        setDecisionTarget(null);
+        setBookingRefreshKey((key) => key + 1);
+      }
+    } finally {
+      if (requestId === decisionRequestSeq.current) {
+        decisionInFlight.current = false;
+        if (bookingAccountKeyRef.current === startedAccountKey) {
+          setDecisionPending(false);
+        }
+      }
+    }
+  }
+
+  // Account-switch and filter-change invalidation: these resets must run
+  // synchronously after the account or filter changes so stale decisions and
+  // bookings from the previous account never update the UI.
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    resetDecisionState();
+  }, [bookingAccountKey, bookingFilter]);
+
+  // Reset the booking filter when the account changes so a different operator
+  // never inherits another operator's selected status view.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBookingFilter("requested");
   }, [bookingAccountKey]);
 
   useEffect(() => {
     if (authLoading) return;
     // Clear any previous account's bookings before new data can render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     resetBookingState();
     if (user && user.role === "operator") {
       void loadBookings(bookingFilter, false);
@@ -386,6 +544,18 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {decisionNotice && (
+            <p className="decisionNotice" role="status">
+              {decisionNotice}
+            </p>
+          )}
+
+          {decisionError && (
+            <p className="hint error" role="alert">
+              Booking {decisionError.reference}: {decisionError.message}
+            </p>
+          )}
+
           {bookingStatus === "loading" && (
             <p className="hint" role="status">Loading booking requests…</p>
           )}
@@ -430,6 +600,154 @@ export default function DashboardPage() {
                     </span>
                   )}
                 </div>
+                {booking.status === "requested" && (
+                  <>
+                    <div className="bookingActions">
+                      <button
+                        className="searchButton"
+                        type="button"
+                        aria-expanded={
+                          decisionTarget?.bookingId === booking.bookingId &&
+                          decisionTarget.type === "accept"
+                        }
+                        aria-controls={`accept-panel-${booking.bookingId}`}
+                        onClick={() => openDecision(booking, "accept")}
+                        disabled={decisionPending}
+                      >
+                        Accept request
+                      </button>
+                      <button
+                        className="searchButtonSecondary"
+                        type="button"
+                        aria-expanded={
+                          decisionTarget?.bookingId === booking.bookingId &&
+                          decisionTarget.type === "decline"
+                        }
+                        aria-controls={`decline-panel-${booking.bookingId}`}
+                        onClick={() => openDecision(booking, "decline")}
+                        disabled={decisionPending}
+                      >
+                        Decline request
+                      </button>
+                    </div>
+
+                    {decisionTarget?.bookingId === booking.bookingId &&
+                      decisionTarget.type === "accept" && (
+                        <div
+                          id={`accept-panel-${booking.bookingId}`}
+                          className="bookingDecisionPanel"
+                          role="group"
+                          aria-label="Confirm booking acceptance"
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.stopPropagation();
+                              closeDecision();
+                            }
+                          }}
+                        >
+                          <p className="decisionNote">
+                            Accepting records operator acceptance in PadHop. It
+                            is not flight approval, dispatch authorization, or a
+                            guarantee that the flight will operate.
+                          </p>
+                          <div className="decisionButtons">
+                            <button
+                              className="searchButton"
+                              type="button"
+                              onClick={() =>
+                                void submitDecision(booking, "accept")
+                              }
+                              disabled={decisionPending}
+                              autoFocus
+                            >
+                              {decisionPending
+                                ? "Accepting…"
+                                : "Confirm acceptance"}
+                            </button>
+                            <button
+                              className="searchButtonSecondary"
+                              type="button"
+                              onClick={closeDecision}
+                              disabled={decisionPending}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                    {decisionTarget?.bookingId === booking.bookingId &&
+                      decisionTarget.type === "decline" && (
+                        <form
+                          id={`decline-panel-${booking.bookingId}`}
+                          className="bookingDecisionPanel"
+                          aria-label="Decline booking request"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void submitDecision(booking, "decline");
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.stopPropagation();
+                              closeDecision();
+                            }
+                          }}
+                        >
+                          <div className="decisionField">
+                            <label htmlFor={`decline-reason-${booking.bookingId}`}>
+                              Reason (shared with the passenger)
+                            </label>
+                            <textarea
+                              id={`decline-reason-${booking.bookingId}`}
+                              value={declineReason}
+                              onChange={(event) =>
+                                setDeclineReason(event.target.value)
+                              }
+                              maxLength={500}
+                              required
+                              autoFocus
+                              aria-describedby={`decline-help-${booking.bookingId} decline-counter-${booking.bookingId}`}
+                            />
+                            <span
+                              id={`decline-help-${booking.bookingId}`}
+                              className="decisionNote"
+                            >
+                              This reason will be shown to the passenger.
+                            </span>
+                            <span
+                              id={`decline-counter-${booking.bookingId}`}
+                              className="decisionCounter"
+                              aria-live="polite"
+                            >
+                              {declineReason.length}/500
+                            </span>
+                          </div>
+                          <div className="decisionButtons">
+                            <button
+                              className="searchButton"
+                              type="submit"
+                              disabled={
+                                decisionPending || !declineReason.trim()
+                              }
+                            >
+                              {decisionPending
+                                ? "Declining…"
+                                : "Submit decline"}
+                            </button>
+                            <button
+                              className="searchButtonSecondary"
+                              type="button"
+                              onClick={closeDecision}
+                              disabled={decisionPending}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                  </>
+                )}
               </article>
             ))}
           </div>

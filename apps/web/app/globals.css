@@ -258,6 +258,23 @@ body {
 .bookingRoute { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; margin: 0; color: var(--text-primary); font-size: .95rem; }
 .bookingMeta { display: flex; flex-wrap: wrap; gap: .35rem 1rem; color: var(--text-secondary); font-size: .82rem; }
 .bookingDeadline { color: var(--brass); font-weight: 600; }
+.bookingActions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
+.bookingActions .searchButton,
+.bookingActions .searchButtonSecondary { flex: 1 1 160px; }
+.bookingDecisionPanel { display: flex; flex-direction: column; gap: .65rem; margin-top: .75rem; padding: .85rem; border: 1px solid var(--panel-border); border-radius: 12px; background: color-mix(in srgb, var(--brass) 5%, var(--panel)); }
+.decisionNote { margin: 0; color: var(--text-secondary); font-size: .82rem; line-height: 1.5; }
+.decisionField { display: flex; flex-direction: column; gap: .35rem; }
+.decisionField label { color: var(--text-secondary); font-size: .78rem; font-weight: 600; }
+.decisionField textarea { width: 100%; min-height: 88px; padding: .6rem .7rem; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--panel); color: var(--text-primary); font: inherit; resize: vertical; }
+.decisionField textarea:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.decisionCounter { align-self: flex-end; color: var(--text-secondary); font-size: .72rem; }
+.decisionButtons { display: flex; flex-wrap: wrap; gap: .5rem; }
+.decisionButtons .searchButton,
+.decisionButtons .searchButtonSecondary { flex: 1 1 140px; }
+.decisionNotice { margin: 0 0 .85rem; padding: .65rem .8rem; border-radius: 10px; background: color-mix(in srgb, var(--brass) 10%, var(--panel)); color: var(--text-primary); font-size: .85rem; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) {
+  .bookingDecisionPanel { transition: none; }
+}
 .helipadDisclaimer { max-width: 760px; margin: .75rem auto 0; color: var(--text-secondary); font-size: .78rem; line-height: 1.55; text-align: center; }
 .holdExplain { margin: .35rem 0 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; max-width: 46ch; }
 .statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin: 0 0 1.5rem; }
